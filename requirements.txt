@@ -1,4 +1,4 @@
-absl-py==0.8.0
+absl-py
 astor==0.7.1
 cachetools==2.1.0
 certifi==2018.8.24
@@ -22,8 +22,8 @@ matplotlib==2.2.2
 networkx==2.1
 numpy==1.16.4
 olefile==0.45.1
-opencv-contrib-python==3.4.2.17
-opencv-python==3.4.2.17
+opencv-contrib-python
+opencv-python
 pillow>=6.2.0
 protobuf==3.6.0
 pycparser==2.18
