@@ -1,0 +1,28 @@
+{
+  "io_options":{
+      "model_load_path":null,
+      "model_save_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/models/epoch0_model_split1.h5",
+      "model_checkpoint_dir":null,
+
+      "train_path":"./output_tif/split1",
+      "valid_paths":["./output_tif/split2/Barren",
+                     "./output_tif/split2/Forest"],
+      "summary_valid_path":"./output_tif/split2",
+      "summary_valid_percent":0.1
+   },
+
+
+   "model_options":{
+         "bands":[3,2,1,11],
+         "num_classes":3
+       },
+
+   "fit_options":{
+      "patch_size":398,
+      "batch_size":4,
+      "epochs":1,
+      "steps_per_epoch":400,
+      "save_each_epoch":true,
+      "save_final_epoch":true
+    }
+}
