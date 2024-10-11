@@ -26,9 +26,7 @@ def train_base(patch_size,fixed = False):
     def apply_transform(img, mask):
         crop_size = patch_size
 
-        # Проверяем, если размер изображения меньше, чем patch_size
         if img.shape[0] < crop_size or img.shape[1] < crop_size:
-            # Если изображение меньше, просто вернем его без обрезки
             return img, mask
 
         if fixed:
@@ -38,11 +36,9 @@ def train_base(patch_size,fixed = False):
             left = random.randint(0, img.shape[1] - crop_size)
             top = random.randint(0, img.shape[0] - crop_size)
 
-        # Обрезаем изображение, с проверкой на выход за границы
         img = img[top:min(top + crop_size, img.shape[0]), left:min(left + crop_size, img.shape[1]), ...]
         mask = mask[top:min(top + crop_size, img.shape[0]), left:min(left + crop_size, img.shape[1]), ...]
 
-        # Выполняем поворот и отражение
         rota = random.choice([0, 1, 2, 3])
         flip = random.choice([True, False])
         if rota and not fixed:
@@ -52,7 +48,6 @@ def train_base(patch_size,fixed = False):
             img = np.fliplr(img)
             mask = np.fliplr(mask)
 
-        # Проверяем итоговый размер
         if img.shape[0] != crop_size or img.shape[1] != crop_size:
             print(f"Предупреждение: итоговый размер изображения {img.shape}, ожидается ({crop_size}, {crop_size})")
 

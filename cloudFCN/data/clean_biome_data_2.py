@@ -9,7 +9,6 @@ from skimage import transform
 sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
 from cloudFCN.data import Constants
 
-
 """
 Script for cleaning biome dataset, downloaded from www.usgs.gov
 
@@ -27,11 +26,10 @@ def is_valid_dir(dir):
     if any(os.path.isdir(child) for child in children):
         return False
     for i in range(1, 12):
-        suffix = '_B'+str(i)+'.TIF'
+        suffix = '_B' + str(i) + '.TIF'
         if not any(child.endswith(suffix) for child in children):
             return False
     if not any(child.endswith('fixedmask.img') for child in children):
-
         return False
 
     return True
@@ -48,7 +46,10 @@ def clean_tile(tile_dir, bands=None, nodata_layer=False, downsample=None):
         print('BAND:', band, end='\r')
         suffix = '_B' + str(band) + '.TIF'
         path = [os.path.join(tile_dir, f)
-                for f in os.listdir(tile_dir) if f.endswith(suffix)]
+                for f in os.listdir(tile_dir)
+                if f.endswith(suffix) and not f.startswith('._')]
+
+        print(f"path is {path}")
         band_im = tif.imread(path).astype(np.float32)
         if band == 8:
             band_im = transform.resize(
@@ -61,18 +62,17 @@ def clean_tile(tile_dir, bands=None, nodata_layer=False, downsample=None):
 
     if downsample is not None:
         img_arr = transform.rescale(
-            img_arr, 1/downsample, multichannel=True, anti_aliasing=True, mode='constant')
+            img_arr, 1 / downsample, multichannel=True, anti_aliasing=True, mode='constant')
 
     mask_path = [os.path.join(tile_dir, f) for f in os.listdir(
         tile_dir) if f.endswith('fixedmask.hdr')][0]
     mask_arr = np.squeeze(spy.open_image(mask_path).load())
-    mask_arr = mask_arr/255
-    mask_arr = transform.resize(mask_arr, img_arr.shape[0:2], order=0)*255
+    mask_arr = mask_arr / 255
+    mask_arr = transform.resize(mask_arr, img_arr.shape[0:2], order=0) * 255
     mask_arr = mask_arr.astype('int')
     img_arr = consts.normalise(img_arr, bands)
 
     if nodata_layer == True:
-
         new_shape = img_arr.shape[:-1] + (img_arr.shape[-1] + 1,)
         new_img_arr = np.zeros(new_shape, dtype=img_arr.dtype)
         new_img_arr[..., :-1] = img_arr
@@ -84,25 +84,23 @@ def clean_tile(tile_dir, bands=None, nodata_layer=False, downsample=None):
 
         img_arr = new_img_arr
 
-
     print(f'2 ----- {img_arr.shape}')  # 2
 
     return img_arr, mask_arr
 
 
 def split_and_save(im, mask, dir, splitsize=398, nodata_amount=0.0):
-
     print(f'3 ----- {im.shape}')  # 3
 
-    n_x = im.shape[0]//splitsize
-    n_y = im.shape[1]//splitsize
+    n_x = im.shape[0] // splitsize
+    n_y = im.shape[1] // splitsize
 
     for i in range(n_x):
         for j in range(n_y):
-            splitim = im[i*splitsize:(i+1)*splitsize,
-                         j*splitsize:(j+1)*splitsize, ...]
-            splitmaskflat = mask[i*splitsize:(i+1) *
-                                 splitsize, j*splitsize:(j+1)*splitsize, ...]
+            splitim = im[i * splitsize:(i + 1) * splitsize,
+                      j * splitsize:(j + 1) * splitsize, ...]
+            splitmaskflat = mask[i * splitsize:(i + 1) *
+                                               splitsize, j * splitsize:(j + 1) * splitsize, ...]
             splitmask = np.empty((splitsize, splitsize, 5), dtype=bool)
             splitmask[..., 0] = splitmaskflat == 0  # FILL
             splitmask[..., 1] = splitmaskflat == 64  # SHADOW
@@ -111,7 +109,7 @@ def split_and_save(im, mask, dir, splitsize=398, nodata_amount=0.0):
             splitmask[..., 4] = splitmaskflat == 255  # THICK
 
             if np.mean(splitim[..., -1]) <= nodata_amount:
-                os.makedirs(os.path.join(dir, str(i).zfill(3)+str(j).zfill(3)))
+                os.makedirs(os.path.join(dir, str(i).zfill(3) + str(j).zfill(3)))
                 np.save(os.path.join(dir, str(i).zfill(3) +
                                      str(j).zfill(3), 'image.npy'), splitim.astype(np.float32))
                 np.save(os.path.join(dir, str(i).zfill(3) +
@@ -159,19 +157,44 @@ if __name__ == '__main__':
             sys.exit()
     os.makedirs(out_path)
 
-    tile_dirs = [os.path.join(biome_data_path, f) for f in os.listdir(
-        biome_data_path) if os.path.isdir(os.path.join(biome_data_path, f))]
-    for tile_dir in tile_dirs:
-        if is_valid_dir(tile_dir):
-            print('Loading', os.path.split(tile_dir)[-1], '...')
-            img_arr, mask_arr = clean_tile(
-                tile_dir, bands=bands, nodata_layer=nodata, downsample=downsample)
-            print('\rLoaded', os.path.split(tile_dir)[-1])
-            tile_out_path = os.path.join(out_path, os.path.split(tile_dir)[-1])
-            os.makedirs(tile_out_path)
-            print('Splitting and saving', os.path.split(tile_dir)[-1], '...')
-            split_and_save(img_arr, mask_arr, tile_out_path,
-                           splitsize, nodata_amount=nodata_threshold)
-            print('\rSplit and saved', os.path.split(tile_dir)[-1])
-        else:
-            print(tile_dir, ' is not a valid biome dataset directory, skipping...')
+
+    for root, dirs, files in os.walk(biome_data_path):
+        for dir_name in dirs:
+            dir_actuel = os.path.join(biome_data_path, dir_name)
+            tile_dirs = [os.path.join(dir_actuel, f) for f in os.listdir(
+                dir_actuel) if os.path.isdir(os.path.join(dir_actuel, f))]
+            biom_out_dir = os.path.join(out_path, os.path.split(dir_name)[-1])
+            os.makedirs(biom_out_dir)
+
+            for tile_dir in tile_dirs:
+                if is_valid_dir(tile_dir):
+                    print(f"tile_dir is {tile_dir}")
+                    print('Loading', os.path.split(tile_dir)[-1], '...')
+                    img_arr, mask_arr = clean_tile(
+                        tile_dir, bands=bands, nodata_layer=nodata, downsample=downsample)
+                    print('\rLoaded', os.path.split(tile_dir)[-1])
+                    tile_out_path = os.path.join(biom_out_dir, os.path.split(tile_dir)[-1])
+                    os.makedirs(tile_out_path)
+                    print('Splitting and saving', os.path.split(tile_dir)[-1], '...')
+                    split_and_save(img_arr, mask_arr, tile_out_path,
+                                   splitsize, nodata_amount=nodata_threshold)
+                    print('\rSplit and saved', os.path.split(tile_dir)[-1])
+                else:
+                    print(tile_dir, ' is not a valid biome dataset directory, skipping...')
+
+    # tile_dirs = [os.path.join(biome_data_path, f) for f in os.listdir(
+    #     biome_data_path) if os.path.isdir(os.path.join(biome_data_path, f))]
+    # for tile_dir in tile_dirs:
+    #     if is_valid_dir(tile_dir):
+    #         print('Loading', os.path.split(tile_dir)[-1], '...')
+    #         img_arr, mask_arr = clean_tile(
+    #             tile_dir, bands=bands, nodata_layer=nodata, downsample=downsample)
+    #         print('\rLoaded', os.path.split(tile_dir)[-1])
+    #         tile_out_path = os.path.join(out_path, os.path.split(tile_dir)[-1])
+    #         os.makedirs(tile_out_path)
+    #         print('Splitting and saving', os.path.split(tile_dir)[-1], '...')
+    #         split_and_save(img_arr, mask_arr, tile_out_path,
+    #                        splitsize, nodata_amount=nodata_threshold)
+    #         print('\rSplit and saved', os.path.split(tile_dir)[-1])
+    #     else:
+    #         print(tile_dir, ' is not a valid biome dataset directory, skipping...')

@@ -39,8 +39,6 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
 
     def generator(batch_size=batch_size):
         offset = 0
-        last_im = None
-        last_mask = None
 
         while True:
             if not shuffle:
@@ -61,7 +59,6 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
                     for transform in transformations:
                         im, mask = transform(im, mask)
 
-                # Проверка значений
                 if np.any(np.isnan(im)) or np.any(np.isinf(im)):
                     print(f"Invalid image data at index {idx}: {im}")
                 if np.any(np.isnan(mask)) or np.any(np.isinf(mask)):
@@ -76,27 +73,27 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
 
 
 if __name__ == "__main__":
-    from cloudFCN.data.Datasets import LandsatDataset
+    from Datasets import LandsatDataset
     import transformations as trf
     import sys
 
-    patch_size = 200
+    patch_size = 398
     batch_size = 5
     train = LandsatDataset(sys.argv[1])
     print(f"Total images in dataset: {len(train.paths)}")
 
     transformations = [trf.train_base(patch_size)]
-    train_ = dataloader(train, batch_size, patch_size, num_channels=8, num_classes=5,
+    train_ = dataloader(train, batch_size, patch_size, num_channels=12, num_classes=5,
                         transformations=transformations, shuffle=True)
     train_flow = train_()
 
     for i in range(30):
         fig, ax = plt.subplots(2, 5, figsize=(10, 4))
         t1 = time.time()
-        imgs, masks = next(train_flow)  # Изменено на imgs, masks, чтобы убрать лишние значения
+        imgs, masks = next(train_flow)
         t2 = time.time()
 
-        for j in range(5):  # Изменено на j, чтобы избежать конфликта с i
+        for j in range(5):
             imrgb, maskflat = train.display(imgs[j, ...], masks[j, ...])
             ax[0, j].imshow(imrgb)
             ax[0, j].set_axis_off()
