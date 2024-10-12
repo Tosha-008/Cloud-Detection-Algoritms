@@ -3,6 +3,7 @@
       "model_load_path":null,
       "model_save_path":null,
       "model_checkpoint_dir":null,
+      "model_name":"mfcnn",
 
       "train_path":"./datasets/biome/split1",
       "valid_paths":["./datasets/biome/split2/Barren",

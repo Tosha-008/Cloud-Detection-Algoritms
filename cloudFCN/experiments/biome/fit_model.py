@@ -22,6 +22,7 @@ def fit_model(config):
     model_load_path = io_opts['model_load_path']
     model_save_path = io_opts['model_save_path']
     model_checkpoint_dir = io_opts['model_checkpoint_dir']
+    model_name = io_opts['model_name']
 
     if model_checkpoint_dir is not None:
         chkpnt_path = os.path.join(
