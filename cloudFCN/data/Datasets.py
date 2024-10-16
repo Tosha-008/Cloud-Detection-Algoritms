@@ -48,6 +48,8 @@ class Dataset():
             Paths to all subdirectories containing valid image/mask pair
         """
         valid_subdirs = []
+        print(f"Type of self.dirs: {type(self.dirs)}")
+        print(f"Contents of self.dirs: {self.dirs}")
         if isinstance(self.dirs, list):
             for dir in self.dirs:
                 print(f'dir_submain = {dir}')
