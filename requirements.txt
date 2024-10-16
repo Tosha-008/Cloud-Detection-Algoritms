@@ -25,10 +25,10 @@ olefile==0.45.1
 opencv-contrib-python
 opencv-python
 pillow>=6.2.0
-protobuf==3.6.0
-pycparser==2.18
+protobuf
+pycparser
 pyparsing
-python-dateutil==2.7.3
+python-dateutil
 pytz==2018.4
 PyWavelets
 pyyaml>=4.2b1
