@@ -51,6 +51,7 @@ class Dataset():
         if isinstance(self.dirs, list):
             for dir in self.dirs:
                 for root, dirs, paths in os.walk(dir):
+                    print(f'root = {root}, dirs = {dirs}')
                     valid_subdirs += [os.path.join(root, dir) for dir in dirs
                                       if os.path.isfile(os.path.join(root, dir, 'image.npy'))
                                       and os.path.isfile(os.path.join(root, dir, 'mask.npy'))]
