@@ -60,6 +60,7 @@ def fit_model(config):
 
     print("Before creating LandsatDataset train_set object")
     train_set = LandsatDataset(train_path)
+    print("After creating LandsatDataset train_set object")
     train_loader = loader.dataloader(
         train_set, batch_size, patch_size,
         transformations=[trf.train_base(patch_size),
@@ -85,6 +86,7 @@ def fit_model(config):
         shuffle=True,
         num_classes=num_classes,
         num_channels=num_channels)
+    print("After train_loader")
     foga_valid_sets = [LandsatDataset(valid_path)
                        for valid_path in valid_paths]
     foga_valid_loaders = [
