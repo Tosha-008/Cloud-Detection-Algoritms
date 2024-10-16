@@ -4,7 +4,7 @@
       "model_save_path":"/content/drive/Output/models/epoch0_model_split1.h5",
       "model_checkpoint_dir":null,
       "model_name":"cloudfcn",
-      "data_path":"/content/drive/Splited_data",
+      "data_path":"/content/drive/MyDrive/Splited_data",
 
       "train_path":"./output_tif/split1",
       "valid_paths":["./output_tif/split2/Barren",
