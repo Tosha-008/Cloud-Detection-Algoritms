@@ -45,6 +45,9 @@ def fit_model(config):
     data_path = io_opts['data_path']
 
     train_path, valid_paths, test_paths = train_valid_test(data_path)
+    print(f'train_path = {train_path}')
+    print(f'valid_paths = {valid_paths}')
+    print(f'test_paths = {test_paths}')
     summary_valid_path = valid_paths
 
     summary_valid_percent = io_opts['summary_valid_percent']
