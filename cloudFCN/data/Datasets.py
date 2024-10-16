@@ -18,6 +18,8 @@ class Dataset():
 
     def __init__(self, dirs, orderShuffle=True):
         self.dirs = dirs
+        print(f"Type of self.dirs_1: {type(self.dirs)}")
+        print(f"Contents of self.dirs_1: {self.dirs}")
         self.paths = self.parse_dirs()  # returns full paths for annotation folders
         if orderShuffle:
             shuffle(self.paths)
