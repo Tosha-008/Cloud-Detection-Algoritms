@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from random import shuffle
+import math
 
 
 class Dataset():
@@ -65,7 +66,7 @@ class Dataset():
         """
         Updates self.paths to random sample of original, with count len(self)*factor
         """
-        new_length = int(len(self)*factor)
+        new_length = int(len(self) * factor)
         self.paths = np.random.choice(self.paths, new_length, replace=False)
         return
 
@@ -92,7 +93,7 @@ class LandsatDataset(Dataset):
         """
         total_pix = 0
         mean = 0
-        frequency = int(1/samplesize)
+        frequency = int(1 / samplesize)
         for i in range(0, len(self), frequency):
             im, _ = self[i]
             mean_i = im.mean(axis=(0, 1))
@@ -125,16 +126,49 @@ class LandsatDataset(Dataset):
             N-by-M array with different values for each class
         """
         assert len(rgb_selection) == 3, 'rgb_selection must have length 3'
-        im = (im[..., rgb_selection]+1.2)/4  # 4 standard deviations from 0->1
+        im = (im[..., rgb_selection] + 1.2) / 4  # 4 standard deviations from 0->1
         im = np.clip(im, 0, 1)
         mask = np.argmax(mask, axis=-1)
         return im, mask
 
 
+def train_valid_test(big_dir, pers_tr=0.5):
+    bioms_names = ['Barren', 'Forest', 'Grass:Crops', 'Shrubland', 'Snow:Ice', 'Urban', 'Water', 'Wetlands']
+    train_set = []
+    validation_set = []
+    test_set = []
+
+    for dir in os.listdir(big_dir):
+        if any(biom in dir for biom in bioms_names):
+            path_t0_biom = os.path.join(big_dir, dir)
+            folders = [f for f in os.listdir(path_t0_biom) if os.path.isdir(os.path.join(path_t0_biom, f))]
+            total_folders = len(folders)
+
+            if 3 >= total_folders > 1:
+                train_set.extend(path_t0_biom + "/" + i for i in folders[:-1])
+                validation_set.append(path_t0_biom + "/" + folders[-1])
+            elif total_folders == 1:
+                train_set.append(path_t0_biom + "/" + folders[-1])
+            else:
+                split_train = math.ceil(total_folders * pers_tr)
+                train_set.extend(path_t0_biom + "/" + i for i in folders[:split_train])
+                validation_set.extend(path_t0_biom + "/" + i for i in folders[split_train:-1])
+                test_set.append(path_t0_biom + "/" + folders[-1])
+
+        else:
+            # print('Use the directory link with Biomes.')
+            pass
+
+    return train_set, validation_set, test_set
+
+
 if __name__ == '__main__':
     import sys
-    dataset_path = sys.argv[1]
-    dataset = LandsatDataset(dataset_path)
-    dataset.randomly_reduce(0.1)
-    mn = dataset.channel_means()
-    print(mn)
+
+    # dataset_path = sys.argv[1]
+    # dataset = LandsatDataset(dataset_path)
+    # dataset.randomly_reduce(0.1)
+    # mn = dataset.channel_means()
+    # print(mn)
+    train_set, validation_set, test_set = train_valid_test("/Users/tosha_008/PycharmProjects/cloudFCN-master/Biome_Data_row")
+    print(test_set)

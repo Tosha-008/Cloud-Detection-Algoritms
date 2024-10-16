@@ -143,12 +143,13 @@ class foga_table5_Callback_no_thin(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.frequency == self.frequency-1:
-            print('|{0: ^12}|{1: ^12}|{2: ^12}|{3: ^12}|{4: ^12}|{5: ^12}|\n ------------------------------------------------------------------------------'.
+            print('\n|{0: ^12}|{1: ^12}|{2: ^12}|{3: ^12}|{4: ^12}|{5: ^12}|\n ------------------------------------------------------------------------------'.
                   format('Biome', '% Correct', '% Omission', '% Comission', '% Cloud', 'N. Samples'))
 
             for dataset, gen in zip(self.datasets, self.datagens):
                 y_true, y_pred = np.array([]), np.array([])
                 biome = os.path.split(dataset.dirs)[-1]
+                biome_name = os.path.split(os.path.split(dataset.dirs)[0])[-1]
                 stepper = 0
                 n_samples = 1
                 n_pixels = 1
@@ -204,10 +205,10 @@ class foga_table5_Callback_no_thin(keras.callbacks.Callback):
 
                     stepper += 1
                     n_samples += x.shape[0]
-                    print(' {0: ^12},{1: ^12},{2: ^12},{3: ^12},{4: ^12}, '.format(biome, np.round(percent_correct, 3), np.round(
+                    print('\n {0: ^12},{1: ^12},{2: ^12},{3: ^12},{4: ^12}, '.format(biome_name+'_'+biome, np.round(percent_correct, 3), np.round(
                         percent_omission, 3), np.round(percent_comission, 3), np.round(percent_cloud, 3)), n_samples-1, end='\r')
 
-                print(' {0: ^12},{1: ^12},{2: ^12},{3: ^12},{4: ^12}, '.format(biome, np.round(percent_correct, 3), np.round(
+                print('\n {0: ^12},{1: ^12},{2: ^12},{3: ^12},{4: ^12}, '.format(biome, np.round(percent_correct, 3), np.round(
                     percent_omission, 3), np.round(percent_comission, 3), np.round(percent_cloud, 3)))
         self.model.save(
             "../results/foga_multi_SNOWONLY/epoch{}_model_split1.keras".format(epoch))

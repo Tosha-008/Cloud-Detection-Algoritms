@@ -32,12 +32,3 @@ plt.imshow(normalize_to_255(rgb_image))
 plt.title('Combined Layers 3 (R), 2 (G), 1 (B)')
 plt.axis('off')
 plt.show()
-
-# num_layers = image.shape[-1]
-
-# for i in range(num_layers):
-#     plt.figure(figsize=(5, 5))
-#     plt.imshow(image[..., i], cmap='gray')  # Отображаем каждый слой в оттенках серого
-#     plt.title(f'Layer {i + 1}')
-#     plt.axis('off')
-#     plt.show()

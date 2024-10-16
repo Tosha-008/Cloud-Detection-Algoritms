@@ -9,7 +9,7 @@ import os
 sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
-from cloudFCN.data.Datasets import LandsatDataset
+from cloudFCN.data.Datasets import LandsatDataset, train_valid_test
 from cloudFCN import models, callbacks
 from cloudFCN.experiments import custom_callbacks
 from MFCNN import model_mfcnn_def
@@ -36,10 +36,16 @@ def fit_model(config):
     else:
         num_channels = 12
 
-    train_path = io_opts['train_path']  # can be single or multiple directories
-    valid_paths = io_opts['valid_paths']
-    summary_valid_path = io_opts['summary_valid_path']
+    # train_path = io_opts['train_path']  # can be single or multiple directories
+    # valid_paths = io_opts['valid_paths']
+    # summary_valid_path = io_opts['summary_valid_path']
+    data_path = io_opts['data_path']
+
+    train_path, valid_paths, test_paths = train_valid_test(data_path)
+    summary_valid_path = valid_paths
+
     summary_valid_percent = io_opts['summary_valid_percent']
+
     fit_opts = config['fit_options']
     batch_size = fit_opts['batch_size']
     patch_size = fit_opts['patch_size']
