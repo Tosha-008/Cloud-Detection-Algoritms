@@ -1,10 +1,10 @@
 {
   "io_options":{
       "model_load_path":null,
-      "model_save_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/models/epoch0_model_split1.h5",
+      "model_save_path":"/content/drive/Output/models/epoch0_model_split1.h5",
       "model_checkpoint_dir":null,
       "model_name":"cloudfcn",
-      "data_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/output_tif/split1",
+      "data_path":"/content/drive/Splited_data",
 
       "train_path":"./output_tif/split1",
       "valid_paths":["./output_tif/split2/Barren",

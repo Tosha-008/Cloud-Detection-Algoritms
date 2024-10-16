@@ -16,7 +16,7 @@ imageio==2.4.1
 Keras~=3.5.0
 Keras-Applications==1.0.2
 Keras-Preprocessing==1.0.1
-kiwisolver==1.0.1
+
 Markdown==2.6.11
 matplotlib~=3.9.2
 networkx==2.1
