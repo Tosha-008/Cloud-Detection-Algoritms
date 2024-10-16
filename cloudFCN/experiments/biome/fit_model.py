@@ -58,6 +58,7 @@ def fit_model(config):
     epochs = fit_opts['epochs']
     steps_per_epoch = fit_opts['steps_per_epoch']
 
+    print("Before creating LandsatDataset train_set object")
     train_set = LandsatDataset(train_path)
     train_loader = loader.dataloader(
         train_set, batch_size, patch_size,
