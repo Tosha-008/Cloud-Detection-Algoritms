@@ -29,7 +29,7 @@ class SPARCS_Callback(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.frequency == self.frequency-1:
-            print('|{0: ^12}|{1: ^12}|{2: ^12}|{3: ^12}|{4: ^12}|{5: ^12}\n -----------------------------------------------------------------'.
+            print('\n|{0: ^12}|{1: ^12}|{2: ^12}|{3: ^12}|{4: ^12}|{5: ^12}\n -----------------------------------------------------------------'.
                   format('Biome', '% Correct', '% Omission', '% Comission', '% Cloud', '%Shadow'))
 
             for dataset, gen in zip(self.datasets, self.datagens):

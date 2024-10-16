@@ -20,7 +20,7 @@ def DoubleConv(inputs, out_channels, mid_channels=None):
 
 
 def FMM(inputs):
-    stage1_conv = Conv2D(64, (3, 3), strides=1, padding='same', kernel_initializer='glorot_uniform')(inputs)
+    stage1_conv = Conv2D(64, (3, 3), strides=2, padding='same', kernel_initializer='glorot_uniform')(inputs)
     stage1_act = Activation('relu')(stage1_conv)
     stage1_dc = DoubleConv(stage1_act, 128, 96)
 
@@ -33,15 +33,36 @@ def FMM(inputs):
     return stage1_dc, stage_2_dc, stage_3_dc
 
 
-def ScaleBlock(inputs, pool_size):
-    avg_pool = AveragePooling2D(pool_size=(pool_size, pool_size))(inputs)
-    conv1 = Conv2D(256, (1, 1), padding='valid')(avg_pool)
-    relu1 = Activation('relu')(conv1)
+# def ScaleBlock(inputs, pool_size):
+#     avg_pool = AveragePooling2D(pool_size=(pool_size, pool_size))(inputs)
+#     conv1 = Conv2D(256, (1, 1), padding='valid')(avg_pool)
+#     relu1 = Activation('relu')(conv1)
+#
+#     upsample = UpSampling2D(size=(pool_size, pool_size), interpolation='bilinear')(relu1)
+#     conv2 = Conv2D(256, (3, 3), padding='same')(upsample)
+#     relu2 = Activation('relu')(conv2)
+#     return relu2
 
-    upsample = UpSampling2D(size=(pool_size, pool_size), interpolation='bilinear')(relu1)
-    conv2 = Conv2D(256, (3, 3), padding='same')(upsample)
-    relu2 = Activation('relu')(conv2)
-    return relu2
+
+class ScaleBlock(Layer):
+    def __init__(self, pool_size):
+        super(ScaleBlock, self).__init__()
+        self.avg_pool = AveragePooling2D(pool_size=(pool_size, pool_size))
+        self.conv1 = Conv2D(256, (1, 1), padding='valid')
+        self.relu1 = Activation('relu')
+        self.upsample = UpSampling2D(size=(pool_size, pool_size), interpolation='bilinear')
+        self.conv2 = Conv2D(256, (3, 3), padding='same')
+        self.relu2 = Activation('relu')
+
+    def call(self, inputs):
+        avg_pool = self.avg_pool(inputs)
+        conv1 = self.conv1(avg_pool)
+        relu1 = self.relu1(conv1)
+
+        upsample = self.upsample(relu1)
+        conv2 = self.conv2(upsample)
+        relu2 = self.relu2(conv2)
+        return relu2
 
 
 class PaddingLayer(Layer):
@@ -66,10 +87,10 @@ class MultiscaleLayer(Layer):
         super(MultiscaleLayer, self).__init__()
 
     def call(self, inputs):
-        x1 = ScaleBlock(inputs, 16)
-        x2 = ScaleBlock(inputs, 8)
-        x3 = ScaleBlock(inputs, 4)
-        x4 = ScaleBlock(inputs, 2)
+        x1 = ScaleBlock(16)(inputs)
+        x2 = ScaleBlock(8)(inputs)
+        x3 = ScaleBlock(4)(inputs)
+        x4 = ScaleBlock(2)(inputs)
 
         maxH = tf.reduce_max([tf.shape(x1)[1], tf.shape(x2)[1], tf.shape(x3)[1], tf.shape(x4)[1]])
         maxW = tf.reduce_max([tf.shape(x1)[2], tf.shape(x2)[2], tf.shape(x3)[2], tf.shape(x4)[2]])
@@ -177,48 +198,13 @@ def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2):
     pad = pad_(x3, x4)
     up1 = Up(pad, 512)
 
-    # diffH = tf.shape(x3)[1] - tf.shape(x4)[1]
-    # diffW = tf.shape(x3)[2] - tf.shape(x4)[2]
-    #
-    # pad_top = diffH // 2
-    # pad_bottom = diffH - pad_top
-    # pad_left = diffW // 2
-    # pad_right = diffW - pad_left
-    #
-    # x4 = tf.pad(x4, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
-    # up1 = Up(tf.concat([x3, x4], axis=-1), 512)
-
     # up-sampling module - Up2
-
     pad = pad_(x2, up1)
     up2 = Up(pad, 256, bn=True)
 
-    # diffH = tf.shape(x2)[1] - tf.shape(up1)[1]
-    # diffW = tf.shape(x2)[2] - tf.shape(up1)[2]
-    #
-    # pad_top = diffH // 2
-    # pad_bottom = diffH - pad_top
-    # pad_left = diffW // 2
-    # pad_right = diffW - pad_left
-    #
-    # up1 = tf.pad(up1, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
-    # up2 = Up(tf.concat([x2, up1], axis=-1), 256, bn=True)
-
     # up-sampling module - Up3
-
     pad = pad_(x1, up2)
     up3 = Up(pad, 128, bn=True)
-
-    # diffH = tf.shape(x1)[1] - tf.shape(up2)[1]
-    # diffW = tf.shape(x1)[2] - tf.shape(up2)[2]
-    #
-    # pad_top = diffH // 2
-    # pad_bottom = diffH - pad_top
-    # pad_left = diffW // 2
-    # pad_right = diffW - pad_left
-    #
-    # up2 = tf.pad(up2, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
-    # up3 = Up(tf.concat([x1, up2], axis=-1), 128, bn=True)
 
     dp = Dropout(rate=dropout_p)(up3)
 

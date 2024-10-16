@@ -69,30 +69,20 @@ plt.axis('off')
 
 plt.show()
 
-# for i in range(batch_size):
-#     plt.figure(figsize=(10, 4))
+# # График лосса
+# plt.plot(model.history['loss'], label='train_loss')
+# plt.plot(model.history['val_loss'], label='val_loss')
+# plt.title('Loss during training and validation')
+# plt.xlabel('Epochs')
+# plt.ylabel('Loss')
+# plt.legend()
+# plt.show()
 #
-#     plt.subplot(1, 2, 1)
-#     plt.imshow(images_normalized[i, ..., :3])
-#     plt.title("Original Image (RGB)")
-#     plt.axis('off')
-#
-#     plt.subplot(1, 2, 2)  # Маска облаков
-#     plt.imshow(np.argmax(predicted_masks[i], axis=-1), cmap='gray')
-#     plt.title("Predicted Cloud Mask")
-#     plt.axis('off')
-#
-#     plt.show()
-
-# num_images = predicted_masks.shape[0]
-# num_channels = predicted_masks.shape[-1]
-#
-# for i in range(num_images):
-#     for ch in range(num_channels):
-#         mask_channel = predicted_masks[i, ..., ch]  # Извлекаем канал ch для изображения i
-#
-#         plt.figure(figsize=(5, 5))
-#         plt.imshow(mask_channel, cmap='gray')
-#         plt.title(f'Image {i + 1}, Channel {ch + 1}')
-#         plt.axis('off')
-#         plt.show()
+# # График точности
+# plt.plot(model.history['accuracy'], label='train_accuracy')
+# plt.plot(model.history['val_accuracy'], label='val_accuracy')
+# plt.title('Accuracy during training and validation')
+# plt.xlabel('Epochs')
+# plt.ylabel('Accuracy')
+# plt.legend()
+# plt.show()

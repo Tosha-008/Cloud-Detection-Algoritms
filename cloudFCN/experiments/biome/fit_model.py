@@ -12,6 +12,7 @@ from cloudFCN.data import loader, transformations as trf
 from cloudFCN.data.Datasets import LandsatDataset
 from cloudFCN import models, callbacks
 from cloudFCN.experiments import custom_callbacks
+from MFCNN import model_mfcnn_def
 
 def fit_model(config):
     """
@@ -101,9 +102,17 @@ def fit_model(config):
 
     if model_load_path:
         model = load_model(model_load_path)
-    else:
+    elif model_name == "cloudfcn":
         model = models.build_model5(
             batch_norm=True, num_channels=num_channels, num_classes=num_classes)
+        optimizer = Adadelta()
+
+        model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'],
+                      optimizer=optimizer)
+        model.summary()
+    elif model_name == "mfcnn":
+        model = model_mfcnn_def.build_model_mfcnn(
+            num_channels=num_channels, num_classes=num_classes)
         optimizer = Adadelta()
 
         model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'],
@@ -116,11 +125,12 @@ def fit_model(config):
                        for foga_valid_loader in foga_valid_loaders]
     callback_list = [custom_callbacks.foga_table5_Callback_no_thin(
                          foga_valid_sets, foga_valid_gens, frequency=1)
+
                      ]
     if model_checkpoint_dir is not None:
         callback_list.append(ModelCheckpoint(chkpnt_path, monitor='val_loss', verbose=0,
                                          save_best_only=False, save_weights_only=False, mode='auto', period=1))
-    model.fit(
+    history = model.fit(
         train_gen,
         validation_data=summary_valid_gen,
         validation_steps=summary_steps,
@@ -129,6 +139,8 @@ def fit_model(config):
         verbose=1,
         callbacks=callback_list
     )
+    with open('training_history.json', 'w') as f:
+        json.dump(history.history, f)
 
     model.save(model_save_path)
     return model
