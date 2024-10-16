@@ -6,7 +6,7 @@ import json
 import sys
 import os
 
-sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
+# sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
 from cloudFCN.data.Datasets import LandsatDataset, train_valid_test
