@@ -7,6 +7,9 @@ import sys
 import os
 
 # sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
+project_path = "/content/cloudFCN-master"
+sys.path.append(project_path)
+
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
 from cloudFCN.data.Datasets import LandsatDataset, train_valid_test
