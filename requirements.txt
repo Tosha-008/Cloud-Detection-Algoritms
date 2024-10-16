@@ -8,7 +8,7 @@ cloudpickle==0.6.0
 cycler==0.10.0
 dask==0.18.2
 decorator==4.3.0
-gast==0.2.0
+gast
 grpcio==1.13.0
 h5py==2.8.0
 idna==2.7
