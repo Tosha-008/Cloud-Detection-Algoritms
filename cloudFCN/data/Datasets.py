@@ -52,7 +52,7 @@ class Dataset():
             for dir in self.dirs:
                 photo = os.path.split(dir)[-1]
                 biome_name = os.path.split(os.path.split(dir)[-2])[-1]
-                print(f'Parsing Photo: {biome_name + '_' + photo}')
+                print(f'Parsing Photo: {biome_name}_{photo}')
                 for root, dirs, paths in os.walk(dir):
                     valid_subdirs += [os.path.join(root, dir) for dir in dirs
                                       if os.path.isfile(os.path.join(root, dir, 'image.npy'))
