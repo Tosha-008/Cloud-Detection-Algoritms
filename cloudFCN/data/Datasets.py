@@ -18,8 +18,6 @@ class Dataset():
 
     def __init__(self, dirs, orderShuffle=True):
         self.dirs = dirs
-        print(f"Type of self.dirs_1: {type(self.dirs)}")
-        print(f"Contents of self.dirs_1: {self.dirs}")
         self.paths = self.parse_dirs()  # returns full paths for annotation folders
         if orderShuffle:
             shuffle(self.paths)
@@ -50,14 +48,9 @@ class Dataset():
             Paths to all subdirectories containing valid image/mask pair
         """
         valid_subdirs = []
-        print(f"Type of self.dirs: {type(self.dirs)}")
-        print(f"Contents of self.dirs: {self.dirs}")
         if isinstance(self.dirs, list):
             for dir in self.dirs:
-                print(f'dir_submain = {dir}')
                 for root, dirs, paths in os.walk(dir):
-                    print(f'dir = {dir}')
-                    print(f'root = {root}, dirs = {dirs}')
                     valid_subdirs += [os.path.join(root, dir) for dir in dirs
                                       if os.path.isfile(os.path.join(root, dir, 'image.npy'))
                                       and os.path.isfile(os.path.join(root, dir, 'mask.npy'))]
