@@ -49,7 +49,7 @@ def train_base(patch_size,fixed = False):
             mask = np.fliplr(mask)
 
         if img.shape[0] != crop_size or img.shape[1] != crop_size:
-            print(f"Предупреждение: итоговый размер изображения {img.shape}, ожидается ({crop_size}, {crop_size})")
+            print(f"Warning: the final image size is {img.shape}, but ({crop_size}, {crop_size}) was expected")
 
         return img, mask
 
@@ -332,4 +332,34 @@ def quantize(number_steps, min_value=0, max_value=255, clip=False):
         if clip:
             img = np.clip(img, min_value, max_value)
         return img, mask
+    return apply_transform
+
+
+def normalize_to_range(min_value=0.0, max_value=1.0):
+    """
+    Normalizes the image to the specified range.
+
+    Parameters
+    ----------
+    min_value : float, optional
+        Minimum value of the normalized output.
+    max_value : float, optional
+        Maximum value of the normalized output.
+
+    Returns
+    -------
+    apply_transform : func
+        Transformation for image/mask pairs.
+    """
+    def apply_transform(img, mask):
+        img_min = np.min(img)
+        img_max = np.max(img)
+
+        # Normalize the image to the range [0, 1]
+        img = (img - img_min) / (img_max - img_min)
+        # Scale to the range [min_value, max_value]
+        img = img * (max_value - min_value) + min_value
+
+        return img, mask
+
     return apply_transform

@@ -1,77 +1,90 @@
 import numpy as np
+import json
 import matplotlib.pyplot as plt
-import tensorflow as tf
 from tensorflow.keras.models import load_model
-from cloudFCN.data.Datasets import LandsatDataset
+import tensorflow as tf
+from cloudFCN.data.Datasets import train_valid_test, LandsatDataset
 from cloudFCN.data import loader, transformations as trf
 
 
-def normalize_to_255(image):
+def show_image_mask_and_prediction(image, mask, pred_mask, index):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
+    # Show the RGB image
+    image_rgb = image[:, :, :3]  # Use only the first 3 channels for RGB
+    axes[0].imshow(image_rgb)
+    axes[0].set_title(f'Image {index}')
+    axes[0].axis('off')
 
-    min_val = np.min(image)
-    max_val = np.max(image)
+    # Show the original mask
+    axes[1].imshow(mask.squeeze(), cmap='gray')
+    axes[1].set_title(f'Original Mask {index}')
+    axes[1].axis('off')
 
-    normalized_image = 255 * (image - min_val) / (max_val - min_val)
+    # Show the predicted mask
+    axes[2].imshow(pred_mask.squeeze(), cmap='gray')
+    axes[2].set_title(f'Predicted Mask {index}')
+    axes[2].axis('off')
 
-    return normalized_image.astype(np.uint8)
+    plt.show()
 
+patch_size = 398
+bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
+batch_size = 2
+num_classes = 3
+num_channels = len(bands)
+num_batches_to_show = 1
 
-model_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/models/epoch0_model_split1.h5"
-images = np.load("/Users/tosha_008/PycharmProjects/cloudFCN-master/output_tif/split2/Barren/LC81390292014135LGN00/004013/image.npy")
-mask = np.load("/Users/tosha_008/PycharmProjects/cloudFCN-master/output_tif/split2/Barren/LC81390292014135LGN00/004013/mask.npy")
+model_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/models/model_mfcnn_8_250.keras"
+dataset_path = "/Volumes/Vault/Splited_data"
 
-images = images[..., [3, 2, 1, 11]]
-
-# dataset_path = "./output_tif/split2/Barren"
-
+# Load the trained model
 model = load_model(model_path)
 
-# dataset = LandsatDataset(dataset_path)
-#
-# batch_size = 4
-# patch_size = 398
-#
-# test_loader_gen = loader.dataloader(
-#     dataset, batch_size, patch_size,
-#     transformations=[trf.train_base(patch_size, fixed=True),
-#                      trf.band_select([3, 2, 1, 11]),
-#                      trf.class_merge(3, 4),
-#                      trf.class_merge(1, 2)],
-#     shuffle=True,
-#     num_classes=3,
-#     num_channels=len([3, 2, 1, 11])
-# )()
-#
-# images, _ = next(test_loader_gen)
+train_path, valid_paths, test_paths = train_valid_test(dataset_path)
 
-images_normalized = normalize_to_255(images)
+test_set = LandsatDataset(test_paths)
+test_set.randomly_reduce(0.1)
 
-images_normalized = np.expand_dims(images_normalized, axis=0)
+test_loader = loader.dataloader(
+    test_set, batch_size, patch_size,
+    transformations=[trf.train_base(patch_size, fixed=True),
+                     trf.band_select(bands),
+                     trf.class_merge(3, 4),
+                     trf.class_merge(1, 2),
+                     trf.normalize_to_range()
+                     ],
+    shuffle=False,
+    num_classes=num_classes,
+    num_channels=num_channels)
 
-predicted_masks = model.predict(images_normalized)
+for i, (images, masks) in enumerate(test_loader()):
+    if i >= num_batches_to_show:
+        break
 
-plt.figure(figsize=(10, 4))
-plt.subplot(1, 3, 1)
-plt.imshow(np.squeeze(normalize_to_255(images[..., :3])))
-plt.title("Original Image (RGB)")
-plt.axis('off')
+    print(f"Batch {i + 1}:")
+    print(f"Images shape: {images.shape}")
+    print(f"Masks shape: {masks.shape}")
 
-plt.subplot(1, 3, 2)
-plt.imshow(np.argmax(mask, axis=-1), cmap='gray')
-plt.title("Actual Cloud Mask")
-plt.axis('off')
+    # Make predictions using the loaded model
+    predictions = model.predict(images)
 
-plt.subplot(1, 3, 3)
-plt.imshow(np.squeeze(np.argmax(predicted_masks, axis=-1)), cmap='gray')
-plt.title("Predicted Cloud Mask")
-plt.axis('off')
+    # Loop over images in the batch
+    for j in range(images.shape[0]):
+        image = images[j]
+        mask = masks[j]
+        pred_mask = predictions[j]
 
-plt.show()
+        show_image_mask_and_prediction(image, mask, pred_mask, i * len(images) + j)
+
+
+# Загрузите метрики из JSON-файла
+# with open('/Users/tosha_008/PycharmProjects/cloudFCN-master/training_history.json', 'r') as f:
+#     history = json.load(f)
 
 # # График лосса
-# plt.plot(model.history['loss'], label='train_loss')
-# plt.plot(model.history['val_loss'], label='val_loss')
+# plt.plot(history['loss'], label='train_loss')
+# plt.plot(history['val_loss'], label='val_loss')
 # plt.title('Loss during training and validation')
 # plt.xlabel('Epochs')
 # plt.ylabel('Loss')
@@ -79,8 +92,8 @@ plt.show()
 # plt.show()
 #
 # # График точности
-# plt.plot(model.history['accuracy'], label='train_accuracy')
-# plt.plot(model.history['val_accuracy'], label='val_accuracy')
+# plt.plot(history['categorical_accuracy'], label='train_accuracy')
+# plt.plot(history['val_categorical_accuracy'], label='val_accuracy')
 # plt.title('Accuracy during training and validation')
 # plt.xlabel('Epochs')
 # plt.ylabel('Accuracy')

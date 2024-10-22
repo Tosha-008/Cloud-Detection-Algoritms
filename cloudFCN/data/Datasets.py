@@ -135,7 +135,7 @@ class LandsatDataset(Dataset):
         return im, mask
 
 
-def train_valid_test(big_dir, pers_tr=0.5):
+def train_valid_test(big_dir, pers_tr=0.7):
     bioms_names = ['Barren', 'Forest', 'Grass:Crops', 'Shrubland', 'Snow:Ice', 'Urban', 'Water', 'Wetlands']
     train_set = []
     validation_set = []

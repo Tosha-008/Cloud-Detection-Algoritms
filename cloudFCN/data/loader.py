@@ -72,6 +72,41 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
     return generator
 
 
+# def get_min_max(loader_function, foga=False):
+#     """Calculate min and max values from the first batch of the data loader and display an RGB image with its mask."""
+#     first_batch = next(iter(loader_function()))
+#     images, masks = first_batch
+#
+#     min_val = np.min(images)
+#     max_val = np.max(images)
+#
+#     min_mask = np.min(masks)
+#     max_mask = np.max(masks)
+#
+#     plt.figure(figsize=(10, 5))
+#
+#     plt.subplot(1, 2, 1)
+#     rgb_image = images[0, :, :, :3]
+#     plt.imshow(rgb_image)
+#     plt.title('RGB Image')
+#     plt.axis('off')
+#
+#     plt.subplot(1, 2, 2)
+#     plt.imshow(masks[0], cmap='gray')
+#     plt.title('Mask')
+#     plt.axis('off')
+#
+#     plt.show()
+#
+#     if foga:
+#         return min_val, max_val, min_mask, max_mask, images, masks
+#
+#     else:
+#         return min_val, max_val, min_mask, max_mask
+
+
+
+
 if __name__ == "__main__":
     from Datasets import LandsatDataset
     import transformations as trf

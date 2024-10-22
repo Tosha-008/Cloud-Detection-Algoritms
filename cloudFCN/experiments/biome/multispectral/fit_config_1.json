@@ -1,10 +1,10 @@
 {
   "io_options":{
       "model_load_path":null,
-      "model_save_path":"/content/drive/Output/models/epoch0_model_split1.h5",
-      "model_checkpoint_dir":null,
-      "model_name":"cloudfcn",
-      "data_path":"/content/drive/MyDrive/Splited_data",
+      "model_save_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/models",
+      "model_checkpoint_dir":"/Users/tosha_008/PycharmProjects/cloudFCN-master/checkpoints",
+      "model_name":"mfcnn",
+      "data_path":"/Volumes/Vault/Splited_data",
 
       "train_path":"./output_tif/split1",
       "valid_paths":["./output_tif/split2/Barren",
@@ -23,9 +23,9 @@
    "fit_options":{
       "patch_size":398,
       "batch_size":4,
-      "epochs":1,
-      "steps_per_epoch":5,
-      "save_each_epoch":true,
+      "epochs":8,
+      "steps_per_epoch":250,
+      "save_each_epoch":false,
       "save_final_epoch":true
     }
 }

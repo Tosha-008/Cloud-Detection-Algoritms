@@ -1,19 +1,16 @@
 {
   "io_options":{
       "model_load_path":null,
-      "model_save_path":null,
-      "model_checkpoint_dir":null,
+      "model_save_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/models",
+      "model_checkpoint_dir":"/Users/tosha_008/PycharmProjects/cloudFCN-master/checkpoints",
+      "model_name":"cloudfcn",
+      "data_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/output_tif/split1",
 
-      "train_path":"./datasets/biome/split2",
-      "valid_paths":["./datasets/biome/split1/Barren",
-                     "./datasets/biome/split1/Forest",
-                     "./datasets/biome/split1/Grass-Crops",
-                     "./datasets/biome/split1/Shrubland",
-                     "./datasets/biome/split1/Snow-Ice",
-                     "./datasets/biome/split1/Urban",
-                     "./datasets/biome/split1/Water",
-                     "./datasets/biome/split1/Wetlands"],
-      "summary_valid_path":"./datasets/biome/split1",
+      "train_path":"./output_tif/split1",
+      "valid_paths":["./output_tif/split2/Barren",
+                     "./output_tif/split2/Forest"],
+      "summary_valid_path":"./output_tif/split2",
+
       "summary_valid_percent":0.1
    },
 
@@ -26,8 +23,8 @@
    "fit_options":{
       "patch_size":398,
       "batch_size":4,
-      "epochs":1000,
-      "steps_per_epoch":1200,
+      "epochs":2,
+      "steps_per_epoch":5,
       "save_each_epoch":false,
       "save_final_epoch":true
     }

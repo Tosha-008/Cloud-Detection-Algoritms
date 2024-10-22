@@ -3,56 +3,76 @@ from keras.layers import Input, Conv2D, Concatenate, BatchNormalization, \
 from keras.models import Model
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adadelta
+from keras.regularizers import l2
 
 
-def DoubleConv(inputs, out_channels, mid_channels=None):
-    if mid_channels is None:
-        mid_channels = out_channels
+class DoubleConv(Layer):
+    def __init__(self, out_channels, mid_channels=None, l2_reg=0.01):
+        super(DoubleConv, self).__init__()
 
-    x = Conv2D(mid_channels, (3, 3), strides=1, padding='same', kernel_initializer='glorot_uniform')(inputs)
-    x = BatchNormalization()(x)
-    x = Activation('relu')(x)
+        if mid_channels is None:
+            mid_channels = out_channels
 
-    x = Conv2D(out_channels, (3, 3), strides=1, padding='same', kernel_initializer='glorot_uniform')(x)
-    x = BatchNormalization()(x)
-    x = Activation('relu')(x)
-    return x
+        self.conv1 = Conv2D(mid_channels, (3, 3), strides=1, padding='same',
+                            kernel_initializer='glorot_uniform', kernel_regularizer=l2(l2_reg))
+        self.bn1 = BatchNormalization(axis=-1, momentum=0.99)
+        self.act1 = LeakyReLU(alpha=0.01)
+
+        self.conv2 = Conv2D(out_channels, (3, 3), strides=1, padding='same',
+                            kernel_initializer='glorot_uniform', kernel_regularizer=l2(l2_reg))
+        self.bn2 = BatchNormalization(axis=-1, momentum=0.99)
+        self.act2 = LeakyReLU(alpha=0.01)
+
+    def call(self, inputs):
+        x = self.conv1(inputs)
+        x = self.bn1(x)
+        x = self.act1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.act2(x)
+
+        return x
 
 
-def FMM(inputs):
-    stage1_conv = Conv2D(64, (3, 3), strides=2, padding='same', kernel_initializer='glorot_uniform')(inputs)
-    stage1_act = Activation('relu')(stage1_conv)
-    stage1_dc = DoubleConv(stage1_act, 128, 96)
+class FMM(Model):
+    def __init__(self, l2_reg=0.01):
+        super(FMM, self).__init__()
 
-    stage_2_max = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')(stage1_dc)
-    stage_2_dc = DoubleConv(stage_2_max, 256, 192)
+        self.stage1_conv = Conv2D(64, (3, 3), strides=2, padding='same',
+                                  kernel_initializer='glorot_uniform', kernel_regularizer=l2(l2_reg))
+        self.stage1_act = LeakyReLU(alpha=0.01)
+        self.stage1_dc = DoubleConv(128, 96, l2_reg=l2_reg)
 
-    stage_3_max = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')(stage_2_dc)
-    stage_3_dc = DoubleConv(stage_3_max, 512, 256)
+        self.stage2_max = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')
+        self.stage2_dc = DoubleConv(256, 192, l2_reg=l2_reg)
 
-    return stage1_dc, stage_2_dc, stage_3_dc
+        self.stage3_max = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')
+        self.stage3_dc = DoubleConv(512, 256, l2_reg=l2_reg)
 
+    def call(self, inputs):
+        x = self.stage1_conv(inputs)
+        x = self.stage1_act(x)
+        stage1_dc = self.stage1_dc(x)
 
-# def ScaleBlock(inputs, pool_size):
-#     avg_pool = AveragePooling2D(pool_size=(pool_size, pool_size))(inputs)
-#     conv1 = Conv2D(256, (1, 1), padding='valid')(avg_pool)
-#     relu1 = Activation('relu')(conv1)
-#
-#     upsample = UpSampling2D(size=(pool_size, pool_size), interpolation='bilinear')(relu1)
-#     conv2 = Conv2D(256, (3, 3), padding='same')(upsample)
-#     relu2 = Activation('relu')(conv2)
-#     return relu2
+        x = self.stage2_max(stage1_dc)
+        stage2_dc = self.stage2_dc(x)
+
+        x = self.stage3_max(stage2_dc)
+        stage3_dc = self.stage3_dc(x)
+
+        return stage1_dc, stage2_dc, stage3_dc
 
 
 class ScaleBlock(Layer):
-    def __init__(self, pool_size):
+    def __init__(self, pool_size, l2_reg=0.01):
         super(ScaleBlock, self).__init__()
         self.avg_pool = AveragePooling2D(pool_size=(pool_size, pool_size))
-        self.conv1 = Conv2D(256, (1, 1), padding='valid')
-        self.relu1 = Activation('relu')
+        self.conv1 = Conv2D(256, (1, 1), padding='valid', kernel_regularizer=l2(l2_reg))
+        self.relu1 = LeakyReLU(alpha=0.01)
         self.upsample = UpSampling2D(size=(pool_size, pool_size), interpolation='bilinear')
-        self.conv2 = Conv2D(256, (3, 3), padding='same')
-        self.relu2 = Activation('relu')
+        self.conv2 = Conv2D(256, (3, 3), padding='same', kernel_regularizer=l2(l2_reg))
+        self.relu2 = LeakyReLU(alpha=0.01)
 
     def call(self, inputs):
         avg_pool = self.avg_pool(inputs)
@@ -66,99 +86,113 @@ class ScaleBlock(Layer):
 
 
 class PaddingLayer(Layer):
+    def __init__(self):
+        super(PaddingLayer, self).__init__()
+
     def call(self, inputs, maxH, maxW):
-        return _padding(inputs, maxH, maxW)
+        diffH = maxH - tf.shape(inputs)[1]
+        diffW = maxW - tf.shape(inputs)[2]
 
+        pad_top = diffH // 2
+        pad_bottom = diffH - pad_top
+        pad_left = diffW // 2
+        pad_right = diffW - pad_left
 
-def _padding(inputs, maxH, maxW):
-    diffH = maxH - tf.shape(inputs)[1]
-    diffW = maxW - tf.shape(inputs)[2]
+        padded_inputs = tf.pad(inputs, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
 
-    pad_top = diffH // 2
-    pad_bottom = diffH - pad_top
-    pad_left = diffW // 2
-    pad_right = diffW - pad_left
-
-    return tf.pad(inputs, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
+        return padded_inputs
 
 
 class MultiscaleLayer(Layer):
     def __init__(self):
         super(MultiscaleLayer, self).__init__()
+        self.scale_block_16 = ScaleBlock(16)
+        self.scale_block_8 = ScaleBlock(8)
+        self.scale_block_4 = ScaleBlock(4)
+        self.scale_block_2 = ScaleBlock(2)
+
+        self.padding_layer = PaddingLayer()
 
     def call(self, inputs):
-        x1 = ScaleBlock(16)(inputs)
-        x2 = ScaleBlock(8)(inputs)
-        x3 = ScaleBlock(4)(inputs)
-        x4 = ScaleBlock(2)(inputs)
+        x1 = self.scale_block_16(inputs)
+        x2 = self.scale_block_8(inputs)
+        x3 = self.scale_block_4(inputs)
+        x4 = self.scale_block_2(inputs)
 
         maxH = tf.reduce_max([tf.shape(x1)[1], tf.shape(x2)[1], tf.shape(x3)[1], tf.shape(x4)[1]])
         maxW = tf.reduce_max([tf.shape(x1)[2], tf.shape(x2)[2], tf.shape(x3)[2], tf.shape(x4)[2]])
 
-        # padding_layer = PaddingLayer()
-        x1 = _padding(x1, maxH, maxW)
-        x2 = _padding(x2, maxH, maxW)
-        x3 = _padding(x3, maxH, maxW)
-        x4 = _padding(x4, maxH, maxW)
+        x1 = self.padding_layer(x1, maxH, maxW)
+        x2 = self.padding_layer(x2, maxH, maxW)
+        x3 = self.padding_layer(x3, maxH, maxW)
+        x4 = self.padding_layer(x4, maxH, maxW)
 
         return tf.concat([x1, x2, x3, x4], axis=-1)
 
 
-# def Multiscale(inputs):
-#     x1 = ScaleBlock(inputs, 16)
-#     x2 = ScaleBlock(inputs, 8)
-#     x3 = ScaleBlock(inputs, 4)
-#     x4 = ScaleBlock(inputs, 2)
-#
-#     maxH =
-#     maxW =
-#
-#     x1 = _padding(x1, maxH, maxW)
-#     x2 = _padding(x2, maxH, maxW)
-#     x3 = _padding(x3, maxH, maxW)
-#     x4 = _padding(x4, maxH, maxW)
-#     return tf.concat([x1, x2, x3, x4], axis=-1)
+class Up(Layer):
+    def __init__(self, out_channels, bn=False, l2_reg=0.01):
+        super(Up, self).__init__()
+        self.bn = bn
+        self.conv = Conv2D(out_channels, (3, 3), padding='same',
+                           kernel_initializer='glorot_uniform', kernel_regularizer=l2(l2_reg))
+        self.upsample = UpSampling2D(size=(2, 2), interpolation='bilinear')
+        if bn:
+            self.bn_layer = BatchNormalization(axis=-1, momentum=0.99)
+        self.activation = LeakyReLU(alpha=0.01)
+
+    def call(self, inputs):
+        x = self.conv(inputs)
+        if self.bn:
+            x = self.bn_layer(x)
+        x = self.activation(x)
+        x = self.upsample(x)
+        return x
 
 
-def Up(inputs, out_channels, bn=False):
-    if bn:
-        x = Conv2D(out_channels, (3, 3), padding='same', kernel_initializer='glorot_uniform')(inputs)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        upsample = UpSampling2D(size=(2, 2), interpolation='bilinear')(x)
+class OutConv(Layer):
+    def __init__(self, out_channels, l2_reg=0.01):
+        super(OutConv, self).__init__()
+        self.conv = Conv2D(out_channels, (1, 1), kernel_initializer='glorot_uniform', kernel_regularizer=l2(l2_reg))
 
-    else:
-        x = Conv2D(out_channels, (3, 3), padding='same', kernel_initializer='glorot_uniform')(inputs)
-        x = Activation('relu')(x)
-        upsample = UpSampling2D(size=(2, 2), interpolation='bilinear')(x)
-
-    return upsample
+    def call(self, inputs):
+        x = self.conv(inputs)
+        return x
 
 
-def OutConv(inputs, out_channels):
-    x = Conv2D(out_channels, (1, 1), kernel_initializer='glorot_uniform')(inputs)
-    return x
+class PadByUp(Layer):
+    def __init__(self):
+        super(PadByUp, self).__init__()
+
+    def call(self, inputs):
+        x, y = inputs
+        self._check_shapes(x, y)
+        return self.pad_and_concat(x, y)
+
+    def pad_and_concat(self, x, y):
+        diffH = tf.shape(x)[1] - tf.shape(y)[1]
+        diffW = tf.shape(x)[2] - tf.shape(y)[2]
+
+        pad_top = diffH // 2
+        pad_bottom = diffH - pad_top
+        pad_left = diffW // 2
+        pad_right = diffW - pad_left
+
+        y_padded = tf.pad(y, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
+        return tf.concat([x, y_padded], axis=-1)
+
+    def _check_shapes(self, x, y):
+        x_shape = tf.shape(x)
+        y_shape = tf.shape(y)
+
+        tf.debugging.assert_equal(tf.shape(x_shape)[0], 4, message="Input tensor x must have 4 dimensions.")
+        tf.debugging.assert_equal(tf.shape(y_shape)[0], 4, message="Input tensor y must have 4 dimensions.")
+
+        tf.debugging.assert_equal(x_shape[0], y_shape[0],
+                                  message="The batch dimensions of the input tensors must match.")
 
 
-class Pad_by_up(Layer):
-    def call(self, x, y):
-        return how_to_pad(x, y)
-
-
-def how_to_pad(x, y):
-    diffH = tf.shape(x)[1] - tf.shape(y)[1]
-    diffW = tf.shape(x)[2] - tf.shape(y)[2]
-
-    pad_top = diffH // 2
-    pad_bottom = diffH - pad_top
-    pad_left = diffW // 2
-    pad_right = diffW - pad_left
-
-    y = tf.pad(y, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
-    return tf.concat([x, y], axis=-1)
-
-
-def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2):
+def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2, l2_reg=0.001):
     """
     This function build_model_mfcnn builds a multiscale fully convolutional neural network (MFCNN) designed for image
     segmentation or similar tasks involving spatial data. The model combines feature extraction, multiscale processing,
@@ -177,43 +211,50 @@ def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2):
     This value defines the fraction of units to drop in the final layers.
 
     Returns OutConv
-
     """
 
     inputs = Input(shape=(None, None, num_channels))
 
     # feature map module
-    x1, x2, x3 = FMM(inputs)
+    fmm = FMM(l2_reg=l2_reg)
+    multiscale_layer = MultiscaleLayer()
+
+    x1, x2, x3 = fmm(inputs)
 
     # multiscale module
-    multiscale_layer = MultiscaleLayer()
     x4 = multiscale_layer(x3)
 
-    # x4 = Multiscale(x3)
-
     # up-sampling module - Up1
-
-    # resolving image size inconsistencies
-    pad_ = Pad_by_up()
-    pad = pad_(x3, x4)
-    up1 = Up(pad, 512)
+    padbyup = PadByUp()
+    pad = padbyup((x3, x4))
+    up1_layer = Up(512, l2_reg=l2_reg)
+    up1 = up1_layer(pad)
 
     # up-sampling module - Up2
-    pad = pad_(x2, up1)
-    up2 = Up(pad, 256, bn=True)
+    pad = padbyup((x2, up1))
+    up2_layer = Up(256, bn=True, l2_reg=l2_reg)
+    up2 = up2_layer(pad)
 
     # up-sampling module - Up3
-    pad = pad_(x1, up2)
-    up3 = Up(pad, 128, bn=True)
+    pad = padbyup((x1, up2))
+    up3_layer = Up(128, bn=True, l2_reg=l2_reg)
+    up3 = up3_layer(pad)
 
     dp = Dropout(rate=dropout_p)(up3)
 
-    outc = OutConv(dp, num_classes)
-    return Model(inputs=inputs, outputs=outc)
+    # output layer
+    out_conv = OutConv(num_classes, l2_reg=l2_reg)
+    outputs = out_conv(dp)
+
+    if num_classes > 1:
+        outputs = Activation('softmax')(outputs)
+
+    model = Model(inputs, outputs)
+    return model
 
 
 if __name__ == "__main__":
-    model = build_model_mfcnn(num_channels=12, num_classes=2)
+    model = build_model_mfcnn(num_channels=12, num_classes=3)
     optimizer = Adadelta()
 
     model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'], optimizer=optimizer)
