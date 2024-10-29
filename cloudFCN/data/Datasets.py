@@ -2,6 +2,8 @@ import numpy as np
 import os
 from random import shuffle
 import math
+import pickle
+from random import shuffle
 
 
 class Dataset():
@@ -13,30 +15,41 @@ class Dataset():
     dirs : str, list
         Paths for each parent directory
     paths : list
-        Paths to every subdirectory within self.dirs that contain valid image/maks pairs.
+        Paths to every subdirectory within self.dirs that contain valid image/mask pairs.
     """
 
-    def __init__(self, dirs, orderShuffle=True):
+    def __init__(self, dirs, orderShuffle=True, cache_file="paths_cache.pkl"):
         self.dirs = dirs
-        self.paths = self.parse_dirs()  # returns full paths for annotation folders
+        self.cache_file = cache_file
+        self.paths = self.load_or_parse_paths()
         if orderShuffle:
             shuffle(self.paths)
-        print('LandsatDataset with {} tiles'.format(len(self.paths)))
+        print(f"LandsatDataset with {len(self.paths)} tiles")
+
+    def load_or_parse_paths(self):
+        if os.path.exists(self.cache_file):
+            print("Loading paths from cache...")
+            with open(self.cache_file, "rb") as f:
+                paths = pickle.load(f)
+        else:
+            print("Parsing directories...")
+            paths = self.parse_dirs()
+            with open(self.cache_file, "wb") as f:
+                pickle.dump(paths, f)
+            print("Paths cached for future use.")
+        return paths
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, index):
-        # print(self.paths[index].split(os.sep)[-2:])
-
-        im = np.load(os.path.join(
-            self.paths[index], 'image.npy')).astype('float')
+        im = np.load(os.path.join(self.paths[index], 'image.npy')).astype('float')
         mask = np.load(os.path.join(self.paths[index], 'mask.npy'))
 
         try:
             return im, mask
         except BaseException:
-            print('Could not read:', self.paths[index])
+            print("Could not read:", self.paths[index])
 
     def parse_dirs(self):
         """
@@ -52,17 +65,17 @@ class Dataset():
             for dir in self.dirs:
                 photo = os.path.split(dir)[-1]
                 biome_name = os.path.split(os.path.split(dir)[-2])[-1]
-                print(f'Parsing Photo: {biome_name}_{photo}')
-                for root, dirs, paths in os.walk(dir):
-                    valid_subdirs += [os.path.join(root, dir) for dir in dirs
-                                      if os.path.isfile(os.path.join(root, dir, 'image.npy'))
-                                      and os.path.isfile(os.path.join(root, dir, 'mask.npy'))]
+                print(f"Parsing Photo: {biome_name}_{photo}")
+                for root, dirs, _ in os.walk(dir):
+                    valid_subdirs += [os.path.join(root, d) for d in dirs
+                                      if os.path.isfile(os.path.join(root, d, 'image.npy'))
+                                      and os.path.isfile(os.path.join(root, d, 'mask.npy'))]
 
         else:
-            for root, dirs, paths in os.walk(self.dirs):
-                valid_subdirs += [os.path.join(root, dir) for dir in dirs
-                                  if os.path.isfile(os.path.join(root, dir, 'image.npy'))
-                                  and os.path.isfile(os.path.join(root, dir, 'mask.npy'))]
+            for root, dirs, _ in os.walk(self.dirs):
+                valid_subdirs += [os.path.join(root, d) for d in dirs
+                                  if os.path.isfile(os.path.join(root, d, 'image.npy'))
+                                  and os.path.isfile(os.path.join(root, d, 'mask.npy'))]
         return valid_subdirs
 
     def randomly_reduce(self, factor):
@@ -135,32 +148,53 @@ class LandsatDataset(Dataset):
         return im, mask
 
 
-def train_valid_test(big_dir, pers_tr=0.7):
+def train_valid_test(big_dir, train_ratio=0.7, dataset='Biome', only_test=False):
     bioms_names = ['Barren', 'Forest', 'Grass:Crops', 'Shrubland', 'Snow:Ice', 'Urban', 'Water', 'Wetlands']
     train_set = []
     validation_set = []
     test_set = []
 
-    for dir in os.listdir(big_dir):
-        if any(biom in dir for biom in bioms_names):
-            path_t0_biom = os.path.join(big_dir, dir)
-            folders = [f for f in os.listdir(path_t0_biom) if os.path.isdir(os.path.join(path_t0_biom, f))]
-            total_folders = len(folders)
+    if dataset == 'Biome':
+        for dir in os.listdir(big_dir):
+            if any(biom in dir for biom in bioms_names):
+                path_t0_biom = os.path.join(big_dir, dir)
+                folders = [f for f in os.listdir(path_t0_biom) if os.path.isdir(os.path.join(path_t0_biom, f))]
+                total_folders = len(folders)
 
-            if 3 >= total_folders > 1:
-                train_set.extend(path_t0_biom + "/" + i for i in folders[:-1])
-                validation_set.append(path_t0_biom + "/" + folders[-1])
-            elif total_folders == 1:
-                train_set.append(path_t0_biom + "/" + folders[-1])
+                if 3 >= total_folders > 1:
+                    train_set.extend(path_t0_biom + "/" + i for i in folders[:-1])
+                    validation_set.append(path_t0_biom + "/" + folders[-1])
+                elif total_folders == 1:
+                    train_set.append(path_t0_biom + "/" + folders[-1])
+                else:
+                    split_train = math.ceil(total_folders * train_ratio)
+                    train_set.extend(path_t0_biom + "/" + i for i in folders[:split_train])
+                    validation_set.extend(path_t0_biom + "/" + i for i in folders[split_train:-1])
+                    test_set.append(path_t0_biom + "/" + folders[-1])
+
             else:
-                split_train = math.ceil(total_folders * pers_tr)
-                train_set.extend(path_t0_biom + "/" + i for i in folders[:split_train])
-                validation_set.extend(path_t0_biom + "/" + i for i in folders[split_train:-1])
-                test_set.append(path_t0_biom + "/" + folders[-1])
+                print('Use the directory link with Biomes.')
+                pass
+    else:
+        test_ratio = 0.1
+        folders = [folder for folder in os.listdir(big_dir) if os.path.isdir(os.path.join(big_dir, folder))]
+        shuffle(folders)
+        total_folders = len(folders)
 
+        if only_test:
+            test_set = [os.path.join(big_dir, folder) for folder in folders]
+            return test_set
         else:
-            # print('Use the directory link with Biomes.')
-            pass
+            train_end = math.ceil(total_folders * train_ratio)
+            test_end = train_end + math.ceil(total_folders * test_ratio)
+
+            train_set = [os.path.join(big_dir, folder) for folder in folders[:train_end]]
+            test_set = [os.path.join(big_dir, folder) for folder in folders[train_end:test_end]]
+            validation_set = [os.path.join(big_dir, folder) for folder in folders[test_end:]]
+
+    print(f"Training folders: {len(train_set)}")
+    print(f"Testing folders: {len(test_set)}")
+    print(f"Validation folders: {len(validation_set)}")
 
     return train_set, validation_set, test_set
 
@@ -173,5 +207,6 @@ if __name__ == '__main__':
     # dataset.randomly_reduce(0.1)
     # mn = dataset.channel_means()
     # print(mn)
-    train_set, validation_set, test_set = train_valid_test("/Users/tosha_008/PycharmProjects/cloudFCN-master/Biome_Data_row")
+    train_set, validation_set, test_set = train_valid_test(
+        "/Users/tosha_008/PycharmProjects/cloudFCN-master/Biome_Data_row")
     print(test_set)

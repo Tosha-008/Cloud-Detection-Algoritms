@@ -55,7 +55,7 @@ def fit_model(config):
     patch_size = fit_opts['patch_size']
     epochs = fit_opts['epochs']
     steps_per_epoch = fit_opts['steps_per_epoch']
-    model_save_path = os.path.join(model_save_path, f'model_{model_name}_{epochs}_{steps_per_epoch}.keras')
+    model_save_path = os.path.join(model_save_path, f'model_{model_name}_{epochs}_{steps_per_epoch}_2.keras')
 
     print("Before creating LandsatDataset train_set object")
     train_set = LandsatDataset(train_path)
@@ -187,7 +187,7 @@ def fit_model(config):
         verbose=1,
         callbacks=callback_list
     )
-    with open('training_history_2.json', 'w') as f:
+    with open('training_history_cloudfcn.json', 'w') as f:
         json.dump(history.history, f)
 
     model.save(model_save_path)

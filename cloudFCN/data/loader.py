@@ -7,12 +7,13 @@ import time
 
 
 def dataloader(dataset, batch_size, patch_size, transformations=None,
-               shuffle=False, num_classes=5, num_channels=12):
+               shuffle=False, num_classes=5, num_channels=12, remove_mask_chanels=False):
     """
     Function to create pipeline for dataloading, creating batches of image/mask pairs.
 
     Parameters
     ----------
+    remove_mask_chanels
     dataset : Dataset
         Contains paths for all image/mask pairs to be sampled.
     batch_size : int
@@ -55,6 +56,10 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
             for batch_i, idx in enumerate(idxs):
                 im, mask = dataset[idx]
 
+                if isinstance(im, str) or isinstance(mask, str):
+                    im = np.load(im).astype('float')
+                    mask = np.load(mask)
+
                 if transformations:
                     for transform in transformations:
                         im, mask = transform(im, mask)
@@ -64,47 +69,14 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
                 if np.any(np.isnan(mask)) or np.any(np.isinf(mask)):
                     print(f"Invalid mask data at index {idx}: {mask}")
 
+                if remove_mask_chanels:
+                    mask = mask[:, :, [-1]]
                 ims[batch_i] = im
                 masks[batch_i] = mask
 
             yield ims, masks
 
     return generator
-
-
-# def get_min_max(loader_function, foga=False):
-#     """Calculate min and max values from the first batch of the data loader and display an RGB image with its mask."""
-#     first_batch = next(iter(loader_function()))
-#     images, masks = first_batch
-#
-#     min_val = np.min(images)
-#     max_val = np.max(images)
-#
-#     min_mask = np.min(masks)
-#     max_mask = np.max(masks)
-#
-#     plt.figure(figsize=(10, 5))
-#
-#     plt.subplot(1, 2, 1)
-#     rgb_image = images[0, :, :, :3]
-#     plt.imshow(rgb_image)
-#     plt.title('RGB Image')
-#     plt.axis('off')
-#
-#     plt.subplot(1, 2, 2)
-#     plt.imshow(masks[0], cmap='gray')
-#     plt.title('Mask')
-#     plt.axis('off')
-#
-#     plt.show()
-#
-#     if foga:
-#         return min_val, max_val, min_mask, max_mask, images, masks
-#
-#     else:
-#         return min_val, max_val, min_mask, max_mask
-
-
 
 
 if __name__ == "__main__":

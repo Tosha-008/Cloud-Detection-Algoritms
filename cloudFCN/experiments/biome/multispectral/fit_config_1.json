@@ -3,13 +3,8 @@
       "model_load_path":null,
       "model_save_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/models",
       "model_checkpoint_dir":"/Users/tosha_008/PycharmProjects/cloudFCN-master/checkpoints",
-      "model_name":"mfcnn",
+      "model_name":"cloudfcn",
       "data_path":"/Volumes/Vault/Splited_data",
-
-      "train_path":"./output_tif/split1",
-      "valid_paths":["./output_tif/split2/Barren",
-                     "./output_tif/split2/Forest"],
-      "summary_valid_path":"./output_tif/split2",
 
       "summary_valid_percent":0.1
    },
