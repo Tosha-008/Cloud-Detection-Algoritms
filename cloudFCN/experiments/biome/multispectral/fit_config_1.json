@@ -3,8 +3,13 @@
       "model_load_path":null,
       "model_save_path":"/Users/tosha_008/PycharmProjects/cloudFCN-master/models",
       "model_checkpoint_dir":"/Users/tosha_008/PycharmProjects/cloudFCN-master/checkpoints",
-      "model_name":"cloudfcn",
-      "data_path":"/Volumes/Vault/Splited_data",
+      "model_name":"cxn",
+      "data_path":"/Volumes/Vault/Splited_biome_384",
+      "dataset_name":"Biome",
+
+      "train_loader_path": "/Users/tosha_008/PycharmProjects/cloudFCN-master/cache_train_Biome_77_384.pkl",
+      "valid_loader_path": "/Users/tosha_008/PycharmProjects/cloudFCN-master/cache_valid_Biome_19_384.pkl",
+      "test_loader_path": "/Users/tosha_008/PycharmProjects/cloudFCN-master/cache_test_Set2_35_384.pkl",
 
       "summary_valid_percent":0.1
    },
@@ -16,10 +21,10 @@
        },
 
    "fit_options":{
-      "patch_size":398,
+      "patch_size":384,
       "batch_size":4,
-      "epochs":8,
-      "steps_per_epoch":250,
+      "epochs":15,
+      "steps_per_epoch":350,
       "save_each_epoch":false,
       "save_final_epoch":true
     }

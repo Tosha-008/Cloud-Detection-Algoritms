@@ -7,7 +7,7 @@ from keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix, classification_report
 import os
 from scipy import misc
-
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
 class metric_Callback(keras.callbacks.Callback):
@@ -147,3 +147,15 @@ class visual_Callback(keras.callbacks.Callback):
 
     def on_batch_end(self, batch, logs={}):
         return
+
+
+def calculate_metrics(mask, pred_mask):
+    mask_flat = mask.flatten()
+    pred_mask_flat = pred_mask.flatten()
+    accuracy = accuracy_score(mask_flat, pred_mask_flat)
+
+    precision = precision_score(mask_flat, pred_mask_flat, zero_division=1)
+    recall = recall_score(mask_flat, pred_mask_flat, zero_division=1)
+    f1 = f1_score(mask_flat, pred_mask_flat, zero_division=1)
+
+    return accuracy, precision, recall, f1

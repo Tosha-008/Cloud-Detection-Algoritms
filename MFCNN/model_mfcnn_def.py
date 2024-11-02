@@ -6,14 +6,6 @@ from tensorflow.keras.optimizers import Adadelta
 from keras.regularizers import l2
 
 
-from keras.layers import Input, Conv2D, Concatenate, BatchNormalization, \
-    LeakyReLU, Conv2DTranspose, Activation, Reshape, MaxPooling2D, AveragePooling2D, UpSampling2D, Dropout, Layer
-from keras.models import Model
-import tensorflow as tf
-from tensorflow.keras.optimizers import Adadelta
-from keras.regularizers import l2
-
-
 class DoubleConv(Layer):
     def __init__(self, out_channels, mid_channels=None, l2_reg=0.01, **kwargs):
         super(DoubleConv, self).__init__(**kwargs)

@@ -1,22 +1,23 @@
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.optimizers import Adagrad, SGD, Adadelta, Adam
-from matplotlib import pyplot as plt
 
 import json
 import sys
 import os
 
-sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
-project_path = "/content/cloudFCN-master"
+project_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master"
 sys.path.append(project_path)
 
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
-from cloudFCN.data.Datasets import LandsatDataset, train_valid_test
+from cloudFCN.data.Datasets import LandsatDataset, train_valid_test, randomly_reduce_list
 from cloudFCN import models, callbacks
 from cloudFCN.experiments import custom_callbacks
 from MFCNN import model_mfcnn_def
+from cxn import cxn_model
+from cloudFCN.data.loader import load_paths
+
 
 def fit_model(config):
     """
@@ -29,37 +30,54 @@ def fit_model(config):
     model_checkpoint_dir = io_opts['model_checkpoint_dir']
     model_name = io_opts['model_name']
 
-    if model_checkpoint_dir is not None:
-        chkpnt_path = os.path.join(
-            model_checkpoint_dir, 'weights_2.{epoch:02d}-{val_loss:.2f}.keras')
-
-    num_classes = config['model_options']['num_classes']
-    bands = config['model_options']['bands']
-    if bands is not None:
-        num_channels = len(bands)
-    else:
-        num_channels = 12
-
-    # train_path = io_opts['train_path']  # can be single or multiple directories
-    # valid_paths = io_opts['valid_paths']
-    # summary_valid_path = io_opts['summary_valid_path']
-    data_path = io_opts['data_path']
-
-    train_path, valid_paths, test_paths = train_valid_test(data_path)
-    summary_valid_path = valid_paths
-
-    summary_valid_percent = io_opts['summary_valid_percent']
-
     fit_opts = config['fit_options']
     batch_size = fit_opts['batch_size']
     patch_size = fit_opts['patch_size']
     epochs = fit_opts['epochs']
     steps_per_epoch = fit_opts['steps_per_epoch']
-    model_save_path = os.path.join(model_save_path, f'model_{model_name}_{epochs}_{steps_per_epoch}_2.keras')
+    num_classes = config['model_options']['num_classes']
+    bands = config['model_options']['bands']
+    summary_valid_percent = io_opts['summary_valid_percent']
+    dataset_name = io_opts['dataset_name']
 
-    print("Before creating LandsatDataset train_set object")
-    train_set = LandsatDataset(train_path)
-    print("After creating LandsatDataset train_set object")
+    model_save_path = os.path.join(model_save_path,
+                                   f'model_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}_2.keras')
+    data_path = io_opts['data_path']
+    train_loader_path = io_opts["train_loader_path"]
+    valid_loader_path = io_opts["valid_loader_path"]
+    test_loader_path = io_opts["test_loader_path"]
+
+    if model_checkpoint_dir is not None:
+        chkpnt_path = os.path.join(
+            model_checkpoint_dir, 'weights_2.{epoch:02d}-{val_loss:.2f}.keras')
+
+    if bands is not None:
+        num_channels = len(bands)
+    else:
+        num_channels = 12
+
+    train_set = load_paths(train_loader_path)
+    summary_valid_set, valid_paths = load_paths(valid_loader_path, valid=True)
+    if valid_paths:
+        valid_paths = list(dict.fromkeys(os.path.dirname(path) for path in valid_paths))
+    test_set = load_paths(test_loader_path)
+
+    if not train_set:
+        train_path, valid_paths, test_paths = train_valid_test(data_path,
+                                                               train_ratio=0.8,
+                                                               # test_ratio=0.1,
+                                                               dataset=dataset_name,
+                                                               only_test=False,
+                                                               no_test=True)
+        summary_valid_path = valid_paths
+        print("Before creating LandsatDataset objects")
+        train_set = LandsatDataset(train_path, cache_file=f"cache_train_{dataset_name}_{len(train_path)}.pkl")
+        summary_valid_set = LandsatDataset(summary_valid_path,
+                                           cache_file=f"cache_valid_{dataset_name}_{len(summary_valid_path)}.pkl")
+        summary_valid_set.randomly_reduce(summary_valid_percent)
+        test_set = LandsatDataset(test_paths, cache_file=f"cache_test_{dataset_name}_{len(test_paths)}.pkl")
+        print("After creating LandsatDataset objects")
+
     train_loader = loader.dataloader(
         train_set, batch_size, patch_size,
         transformations=[trf.train_base(patch_size),
@@ -85,13 +103,10 @@ def fit_model(config):
                          ],
         shuffle=True,
         num_classes=num_classes,
-        num_channels=num_channels)
-    # train_min, train_max, train_min_mask, train_max_mask = loader.get_min_max(train_loader)
-    # print(f'Train images - Min: {train_min}, Max: {train_max}')
-    # print(f'Train masks - Min: {train_min_mask}, Max: {train_max_mask}')
+        num_channels=num_channels,
+        remove_mask_chanels=False)
 
-    foga_valid_sets = [LandsatDataset(valid_path)
-                       for valid_path in valid_paths]
+    foga_valid_sets = [LandsatDataset(valid_path, save_cache=False) for valid_path in valid_paths]
     foga_valid_loaders = [
         loader.dataloader(
             valid_set, batch_size, patch_size,
@@ -103,33 +118,12 @@ def fit_model(config):
                              ],
             shuffle=False,
             num_classes=num_classes,
-            num_channels=num_channels) for valid_set in foga_valid_sets]
+            num_channels=num_channels,
+            remove_mask_chanels=False) for valid_set in foga_valid_sets]
 
-    # for i, valid_loader in enumerate(foga_valid_loaders):
-    #     valid_min, valid_max, valid_min_mask, valid_max_mask, im, mk = loader.get_min_max(valid_loader, foga=True)
-    #
-    #     plt.figure(figsize=(10, 5))
-    #     plt.title(f'Validation set {i + 1}')
-    #
-    #     plt.subplot(1, 2, 1)
-    #     rgb_image = im[0, :, :, :3]
-    #     plt.imshow(rgb_image)
-    #     plt.title('RGB Image')
-    #     plt.axis('off')
-    #
-    #     plt.subplot(1, 2, 2)
-    #     plt.imshow(mk[0], cmap='gray')
-    #     plt.title('Mask')
-    #     plt.axis('off')
-    #
-    #     plt.show()
-    #     print(f'Validation set {i + 1} - Min: {valid_min}, Max: {valid_max}')
-    #     print(f'Validation masks set {i + 1} - Min: {valid_min_mask}, Max: {valid_max_mask}')
-
-    summary_valid_set = LandsatDataset(summary_valid_path)
-    summary_valid_set.randomly_reduce(summary_valid_percent)
+    summary_valid_set = randomly_reduce_list(summary_valid_set, summary_valid_percent)
     summary_batch_size = 12
-    summary_steps = len(summary_valid_set)//summary_batch_size
+    summary_steps = len(summary_valid_set) // summary_batch_size
     summary_valid_loader = loader.dataloader(
         summary_valid_set, summary_batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=True),
@@ -140,11 +134,8 @@ def fit_model(config):
                          ],
         shuffle=False,
         num_classes=num_classes,
-        num_channels=num_channels)
-
-    # summary_min, summary_max, summary_min_mask, summary_max_mask = loader.get_min_max(summary_valid_loader)
-    # print(f'Summary valid images - Min: {summary_min}, Max: {summary_max}')
-    # print(f'Summary valid masks - Min: {summary_min_mask}, Max: {summary_max_mask}')
+        num_channels=num_channels,
+        remove_mask_chanels=False)
 
     if model_load_path:
         model = load_model(model_load_path)
@@ -160,20 +151,30 @@ def fit_model(config):
     elif model_name == "mfcnn":
         model = model_mfcnn_def.build_model_mfcnn(
             num_channels=num_channels, num_classes=num_classes)
-        # optimizer = Adadelta()
         optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)
         model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'],
                       optimizer=optimizer)
         model.summary()
+
+    elif model_name == "cxn":
+        model = cxn_model.model_arch(input_rows=patch_size, input_cols=patch_size, num_of_channels=num_channels,
+                                     num_of_classes=num_classes)
+        optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)
+        model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'],
+                      optimizer=optimizer)
+        model.summary()
+
+    else:
+        raise ValueError('Choose correct model`s name')
 
     train_gen = train_loader()
     summary_valid_gen = summary_valid_loader()
     foga_valid_gens = [foga_valid_loader()
                        for foga_valid_loader in foga_valid_loaders]
     callback_list = [custom_callbacks.foga_table5_Callback_no_thin(
-                         foga_valid_sets, foga_valid_gens, frequency=1)
+        foga_valid_sets, foga_valid_gens, frequency=1)
 
-                     ]
+    ]
     if model_checkpoint_dir is not None:
         callback_list.append(ModelCheckpoint(chkpnt_path, monitor='val_loss', verbose=0,
                                              save_best_only=True, save_weights_only=False,
@@ -187,7 +188,7 @@ def fit_model(config):
         verbose=1,
         callbacks=callback_list
     )
-    with open('training_history_cloudfcn.json', 'w') as f:
+    with open(f'training_history_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}.json', 'w') as f:
         json.dump(history.history, f)
 
     model.save(model_save_path)

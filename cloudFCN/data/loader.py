@@ -1,9 +1,10 @@
 import numpy as np
 import os
-
+import random
 from matplotlib import pyplot as plt
 from scipy import misc
 import time
+import pickle
 
 
 def dataloader(dataset, batch_size, patch_size, transformations=None,
@@ -77,6 +78,32 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
             yield ims, masks
 
     return generator
+
+
+def convert_paths_to_tuples(paths_list):
+    return [(os.path.join(path, 'image.npy'), os.path.join(path, 'mask.npy')) for path in paths_list]
+
+
+def load_paths(filename="dataloader.pkl", valid=False):
+    if filename is None:
+        print("No existing datapaths found. Creating a new one.")
+        if valid:
+            return None, None
+        else:
+            return None
+    if os.path.exists(filename):
+        with open(filename, "rb") as f:
+            datapaths = pickle.load(f)
+        print("Datapaths loaded from", filename)
+        datapaths_copy = datapaths[:]
+        random.shuffle(datapaths_copy)
+        if valid:
+            return convert_paths_to_tuples(datapaths_copy), datapaths
+        else:
+            return convert_paths_to_tuples(datapaths_copy)
+    else:
+        print("No existing datapaths found. Creating a new one.")
+        return None
 
 
 if __name__ == "__main__":

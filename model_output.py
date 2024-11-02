@@ -3,41 +3,11 @@ import json
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 import os
-import pickle
 from cloudFCN.data.Datasets import train_valid_test, LandsatDataset
 from cloudFCN.data import loader, transformations as trf
 from MFCNN.model_mfcnn_def import *
-import random
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-
-def convert_paths_to_tuples(paths_list):
-    return [(os.path.join(path, 'image.npy'), os.path.join(path, 'mask.npy')) for path in paths_list]
-
-
-def load_paths(filename="dataloader.pkl"):
-    if os.path.exists(filename):
-        with open(filename, "rb") as f:
-            datapaths = pickle.load(f)
-        print("Datapaths loaded from", filename)
-        random.shuffle(datapaths)
-        return convert_paths_to_tuples(datapaths)
-    else:
-        print("No existing datapaths found. Creating a new one.")
-        return None
-
-
-def calculate_metrics(mask, pred_mask):
-    mask_flat = mask.flatten()
-    pred_mask_flat = pred_mask.flatten()
-
-    accuracy = accuracy_score(mask_flat, pred_mask_flat)
-
-    precision = precision_score(mask_flat, pred_mask_flat, zero_division=1)
-    recall = recall_score(mask_flat, pred_mask_flat, zero_division=1)
-    f1 = f1_score(mask_flat, pred_mask_flat, zero_division=1)
-
-    return accuracy, precision, recall, f1
+from cloudFCN.data.loader import load_paths, convert_paths_to_tuples
+from cloudFCN.callbacks import calculate_metrics
 
 
 def show_image_mask_and_prediction(image, mask, pred_mask, index, num_classes, show_masks_pred=False):
@@ -46,7 +16,7 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, num_classes, s
     accuracy, precision, recall, f1 = calculate_metrics(mask.squeeze(), pred_mask_binary)
 
     if show_masks_pred:
-        fig, axes = plt.subplots(2, num_classes, figsize=(15, 10))
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
         image_rgb = image[:, :, :3]  # Use only the first 3 channels for RGB
         axes[0, 0].imshow(image_rgb)
         axes[0, 0].set_title(f'Image {index}')
@@ -55,9 +25,10 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, num_classes, s
         axes[0, 1].set_title(f'Original Mask {index}')
         axes[0, 1].axis('off')
 
-        for c in range(num_classes):
+        for c in range(3):
             pred_layer = pred_mask[:, :, c]
-            axes[1, c].imshow(pred_layer, cmap='gray', vmin=0, vmax=1)
+            pred_mask_binary = (pred_layer > 0.5).astype(float)
+            axes[1, c].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
             axes[1, c].set_title(f'Predicted Class {c} Layer')
             axes[1, c].axis('off')
     else:
@@ -111,17 +82,19 @@ def plot_metrics(history, show_metrics=False):
 
 
 # Code to load model and dataset remains unchanged
-patch_size = 398
+patch_size = 384
 bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
-batch_size = 15
+batch_size = 5
 num_classes = 1
 num_channels = len(bands)
 num_batches_to_show = 1
 
-model_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/models/model_mfcnn_8_250.keras"
-dataset_path = "/Volumes/Vault/Splited_data"  # Biome
-dataset_path_2 = '/Volumes/Vault/Splited_data_set_2'  # Dataset 2 for test
-test_loader_path = "test_paths_set2.pkl"
+model_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/models/model_cxn_384_2_5_2.keras"
+dataset_path = "/Volumes/Vault/Splited_biome_384"  # Biome
+dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Dataset 2 for test
+test_loader_path = None
+dataset_1 = "Biome"
+dataset_2 = "Set_2"
 
 custom_objects = {
     'MultiscaleLayer': MultiscaleLayer,
@@ -138,9 +111,13 @@ model = load_model(model_path, custom_objects=custom_objects)
 test_set = load_paths(test_loader_path)
 
 if not test_set:
-    # train_path, valid_paths, test_paths = train_valid_test(dataset_path)   # if Biome
-    test_paths = train_valid_test(dataset_path_2, dataset='Set 2', only_test=True)   # if Set 2
-    test_set = LandsatDataset(test_paths, cache_file="test_paths_set2.pkl")
+    train_path, valid_paths, test_paths = train_valid_test(dataset_path_2,
+                                                           train_ratio=0.7,
+                                                           test_ratio=0.1,
+                                                           dataset=dataset_2,
+                                                           only_test=True,
+                                                           no_test=False)
+    test_set = LandsatDataset(test_paths, cache_file=f"test_paths_{dataset_2}_{len(test_paths)}.pkl", save_cache=True)
 
 test_ = loader.dataloader(
     test_set, batch_size, patch_size,
@@ -148,8 +125,8 @@ test_ = loader.dataloader(
                      trf.band_select(bands),
                      # trf.class_merge(3, 4),   #  If Biome
                      # trf.class_merge(1, 2),   #  If Biome
-                     trf.class_merge(2, 3),   # If Set 2
-                     trf.class_merge(0, 1),   # If Set 2
+                     trf.class_merge(2, 3),  # If Set 2
+                     trf.class_merge(0, 1),  # If Set 2
                      trf.normalize_to_range()
                      ],
     shuffle=False,
@@ -172,10 +149,10 @@ for i, (images, masks) in enumerate(test_()):
         mask = masks[j]
         pred_mask = predictions[j]
 
-        show_image_mask_and_prediction(image, mask, pred_mask, i * len(images) + j, num_classes, show_masks_pred=False)
+        show_image_mask_and_prediction(image, mask, pred_mask, i * len(images) + j, num_classes, show_masks_pred=True)
 
 # Load metrics from JSON file
-with open('/training_history_cloudfcn.json', 'r') as f:
+with open('/Users/tosha_008/PycharmProjects/cloudFCN-master/training_history_cxn_384_2_5.json', 'r') as f:
     history = json.load(f)
 
 # Plot metrics only if specified

@@ -18,15 +18,15 @@ class Dataset():
         Paths to every subdirectory within self.dirs that contain valid image/mask pairs.
     """
 
-    def __init__(self, dirs, orderShuffle=True, cache_file="paths_cache.pkl"):
+    def __init__(self, dirs, orderShuffle=True, cache_file="paths_cache.pkl", save_cache=True):
         self.dirs = dirs
         self.cache_file = cache_file
-        self.paths = self.load_or_parse_paths()
+        self.paths = self.load_or_parse_paths(save_cache)
         if orderShuffle:
             shuffle(self.paths)
         print(f"LandsatDataset with {len(self.paths)} tiles")
 
-    def load_or_parse_paths(self):
+    def load_or_parse_paths(self, save_cache):
         if os.path.exists(self.cache_file):
             print("Loading paths from cache...")
             with open(self.cache_file, "rb") as f:
@@ -34,9 +34,12 @@ class Dataset():
         else:
             print("Parsing directories...")
             paths = self.parse_dirs()
-            with open(self.cache_file, "wb") as f:
-                pickle.dump(paths, f)
-            print("Paths cached for future use.")
+            if save_cache:
+                with open(self.cache_file, "wb") as f:
+                    pickle.dump(paths, f)
+                print("Paths cached for future use.")
+            else:
+                print("Caching skipped.")
         return paths
 
     def __len__(self):
@@ -148,55 +151,89 @@ class LandsatDataset(Dataset):
         return im, mask
 
 
-def train_valid_test(big_dir, train_ratio=0.7, dataset='Biome', only_test=False):
+def train_valid_test(big_dir, train_ratio=0.7, test_ratio=0.1, dataset='Biome', only_test=False, no_test=False):
     bioms_names = ['Barren', 'Forest', 'Grass:Crops', 'Shrubland', 'Snow:Ice', 'Urban', 'Water', 'Wetlands']
     train_set = []
     validation_set = []
     test_set = []
+    folders = []
+
+    if only_test and no_test:
+        raise ValueError('Choose correct parameters for test set: only_test cannot be True if no_test is True.')
+    if train_ratio + test_ratio >= 1:
+        raise ValueError('Choose correct parameters for test and train ratio.')
+
+    if only_test:
+        train_ratio = 0
+        test_ratio = 1
+    elif no_test:
+        test_ratio = 0
 
     if dataset == 'Biome':
         for dir in os.listdir(big_dir):
             if any(biom in dir for biom in bioms_names):
                 path_t0_biom = os.path.join(big_dir, dir)
-                folders = [f for f in os.listdir(path_t0_biom) if os.path.isdir(os.path.join(path_t0_biom, f))]
-                total_folders = len(folders)
+                folders += [os.path.join(path_t0_biom, f) for f in os.listdir(path_t0_biom) if
+                            os.path.isdir(os.path.join(path_t0_biom, f))]
 
-                if 3 >= total_folders > 1:
-                    train_set.extend(path_t0_biom + "/" + i for i in folders[:-1])
-                    validation_set.append(path_t0_biom + "/" + folders[-1])
-                elif total_folders == 1:
-                    train_set.append(path_t0_biom + "/" + folders[-1])
-                else:
-                    split_train = math.ceil(total_folders * train_ratio)
-                    train_set.extend(path_t0_biom + "/" + i for i in folders[:split_train])
-                    validation_set.extend(path_t0_biom + "/" + i for i in folders[split_train:-1])
-                    test_set.append(path_t0_biom + "/" + folders[-1])
-
-            else:
-                print('Use the directory link with Biomes.')
-                pass
     else:
-        test_ratio = 0.1
-        folders = [folder for folder in os.listdir(big_dir) if os.path.isdir(os.path.join(big_dir, folder))]
-        shuffle(folders)
-        total_folders = len(folders)
+        folders = [os.path.join(big_dir, folder) for folder in os.listdir(big_dir) if
+                   os.path.isdir(os.path.join(big_dir, folder))]
 
-        if only_test:
-            test_set = [os.path.join(big_dir, folder) for folder in folders]
-            return test_set
-        else:
-            train_end = math.ceil(total_folders * train_ratio)
-            test_end = train_end + math.ceil(total_folders * test_ratio)
+    shuffle(folders)
+    total_folders = len(folders)
 
-            train_set = [os.path.join(big_dir, folder) for folder in folders[:train_end]]
-            test_set = [os.path.join(big_dir, folder) for folder in folders[train_end:test_end]]
-            validation_set = [os.path.join(big_dir, folder) for folder in folders[test_end:]]
+    if total_folders == 0:
+        print("No folders found.")
+        return train_set, validation_set, test_set
+
+    if only_test:
+        test_set.extend(folders)
+        print(f"Testing folders: {len(test_set)}")
+        return train_set, validation_set, test_set
+
+    if total_folders == 1:
+        train_set.append(folders[0])
+
+    elif total_folders < 4:
+        train_set.extend(folders[:-1])
+        validation_set.append(folders[-1])
+
+    else:  # total_folders >= 4
+        split_train = math.ceil(total_folders * train_ratio)
+        split_test = math.ceil(total_folders * test_ratio)
+
+        train_set.extend(folders[:split_train])
+        if test_ratio > 0:
+            test_set.extend(folders[split_train:split_train + split_test])
+        validation_set.extend(folders[split_train + split_test:])
 
     print(f"Training folders: {len(train_set)}")
     print(f"Testing folders: {len(test_set)}")
     print(f"Validation folders: {len(validation_set)}")
 
     return train_set, validation_set, test_set
+
+
+def randomly_reduce_list(paths, factor):
+    """
+    Randomly reduces the list of paths to a sample of the original, with count len(paths) * factor.
+    """
+    new_length = int(len(paths) * factor)
+
+    if new_length > len(paths):
+        new_length = len(paths)
+    elif new_length < 1:
+        new_length = 1
+
+    sampled_indices = np.random.choice(len(paths), new_length, replace=False)
+
+    sampled_paths = [paths[i] for i in sampled_indices]
+
+    return sampled_paths
+
+
+
 
 
 if __name__ == '__main__':
@@ -207,6 +244,10 @@ if __name__ == '__main__':
     # dataset.randomly_reduce(0.1)
     # mn = dataset.channel_means()
     # print(mn)
-    train_set, validation_set, test_set = train_valid_test(
-        "/Users/tosha_008/PycharmProjects/cloudFCN-master/Biome_Data_row")
-    print(test_set)
+    train_set, validation_set, test_set = train_valid_test("/Volumes/Vault/Splited_data_set_2",
+                                                           train_ratio=0.7,
+                                                           # test_ratio=0.1,
+                                                           dataset='Lan2',
+                                                           only_test=True,
+                                                           no_test=False)
+    # print(test_set)

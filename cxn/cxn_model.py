@@ -1,9 +1,13 @@
-from keras.models import Model
 from keras.layers import *
 import keras
 from tensorflow.keras.optimizers import *
-
 from keras import backend as K
+from keras.layers import Input, Conv2D, concatenate, BatchNormalization, \
+    LeakyReLU, Conv2DTranspose, Activation, Reshape, MaxPooling2D, AveragePooling2D, UpSampling2D, Dropout, \
+    Layer, SeparableConv2D, DepthwiseConv2D, Concatenate
+from keras.models import Model
+from tensorflow.keras.optimizers import Adadelta, Adam
+import math
 
 smooth = 0.0000001
 
@@ -293,7 +297,7 @@ def model_arch(input_rows=256, input_cols=256, num_of_channels=3, num_of_classes
 
     conv6 = bridge(pool5, 1024, (3, 3))
 
-    conv6 = aspp(conv6, input_rows / 32)
+    conv6 = aspp(conv6, int(input_rows / 32))
 
     convT7 = Conv2DTranspose(512, (2, 2), strides=(2, 2), padding='same')(conv6)
     prevup7 = improve_ff_block4(input_tensor1=conv4, input_tensor2=conv3, input_tensor3=conv2, input_tensor4=conv1,
@@ -330,6 +334,8 @@ def model_arch(input_rows=256, input_cols=256, num_of_channels=3, num_of_classes
     return Model(inputs=[inputs], outputs=[conv12])
 
 
-model = model_arch(input_rows=384, input_cols=384, num_of_channels=3, num_of_classes=1)
-model.compile(optimizer=Adam(lr=1e-4), loss=jacc_coef, metrics=[jacc_coef, 'accuracy'])
-len(model.layers)
+if __name__ == "__main__":
+    model = model_arch(input_rows=384, input_cols=384, num_of_channels=3, num_of_classes=1)
+    model.compile(optimizer=Adam(learning_rate=1e-4), loss=jacc_coef, metrics=[jacc_coef, 'accuracy'])
+    model.summary()
+    # print(len(model.layers))
