@@ -115,7 +115,7 @@ def fit_model(config):
     for image_path, mask_path in summary_valid_set:
         new_image_path = image_path.replace('/Volumes/Vault/Splited_biome_384', drive_prefix)
         new_mask_path = mask_path.replace('/Volumes/Vault/Splited_biome_384', drive_prefix)
-        updated_sum_valid_paths.extend((new_image_path, new_mask_path))
+        updated_sum_valid_paths.append((new_image_path, new_mask_path))
         valid_dirs_to_make.extend(
             os.path.dirname(image_path).replace('/Volumes/Vault/Splited_biome_384', local_valid_prefix))
 
@@ -132,7 +132,7 @@ def fit_model(config):
         # !cp
         # '{valid_dirs_to_make}' '{local_mask_path}'
 
-        local_sum_valid_paths.extend((local_image_path, local_mask_path))
+        local_sum_valid_paths.append((local_image_path, local_mask_path))
     print(f"Loading validation data COMPLETED")
     print(local_sum_valid_paths)
     foga_valid_sets = [LandsatDataset(valid_path, save_cache=False) for valid_path in lokal_valid_paths]
@@ -218,7 +218,7 @@ def fit_model(config):
             # !cp
             # '{drive_mask_path}' '{local_mask_path}'
 
-            local_paths.extend((local_image_path, local_mask_path))
+            local_paths.append((local_image_path, local_mask_path))
             print(f"Loading data for part {epoch + 1} COMPLETED")
 
         train_loader = loader.dataloader(
