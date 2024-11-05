@@ -85,6 +85,7 @@ def convert_paths_to_tuples(paths_list):
 
 
 def load_paths(filename="dataloader.pkl", valid=False):
+    print(filename)
     if filename is None:
         print("No existing datapaths found. Creating a new one.")
         if valid:
