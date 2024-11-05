@@ -86,7 +86,7 @@ def fit_model(config):
     test_loader_path = io_opts["test_loader_path"]
 
     # os.makedirs('/content/train_part_set', exist_ok=True)
-    drive_prefix = '/content/drive/Splited_data'
+    drive_prefix = '/content/drive/MyDrive/Splited_data'
     local_train_prefix = '/content/local_train_data'
     local_valid_prefix = '/content/local_valid_data'
 
