@@ -1,13 +1,15 @@
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.optimizers import Adagrad, SGD, Adadelta, Adam
+import tensorflow as tf
 
 import json
 import sys
 import os
 
-project_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master"
+project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
 sys.path.append(project_path)
+tf.config.threading.get_inter_op_parallelism_threads()
 
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
@@ -64,8 +66,8 @@ def fit_model(config):
 
     if not train_set:
         train_path, valid_paths, test_paths = train_valid_test(data_path,
-                                                               train_ratio=0.8,
-                                                               # test_ratio=0.1,
+                                                               train_ratio=0.96,
+                                                               test_ratio=0,
                                                                dataset=dataset_name,
                                                                only_test=False,
                                                                no_test=True)
