@@ -152,7 +152,7 @@ class LandsatDataset(Dataset):
 
 
 def train_valid_test(big_dir, train_ratio=0.7, test_ratio=0.1, dataset='Biome', only_test=False, no_test=False):
-    bioms_names = ['Barren', 'Forest', 'Grass:Crops', 'Shrubland', 'Snow:Ice', 'Urban', 'Water', 'Wetlands']
+    bioms_names = ['Barren', 'Forest', 'Grass_Crops', 'Shrubland', 'Snow_Ice', 'Urban', 'Water', 'Wetlands']  # _ can be changed
     train_set = []
     validation_set = []
     test_set = []

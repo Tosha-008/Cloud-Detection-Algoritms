@@ -1,6 +1,6 @@
-from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
-from tensorflow.keras.optimizers import Adagrad, SGD, Adadelta, Adam
+from tensorflow.keras.models import load_model
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.optimizers import Adadelta, Adam
 
 import json
 import sys
@@ -13,9 +13,9 @@ sys.path.append(project_path)
 
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
-from cloudFCN.data.Datasets import LandsatDataset, train_valid_test, randomly_reduce_list
-from cloudFCN import models, callbacks
-from cloudFCN.experiments import custom_callbacks
+from data.Datasets import LandsatDataset, randomly_reduce_list
+from cloudFCN import models
+from experiments import custom_callbacks
 from MFCNN import model_mfcnn_def
 from cxn import cxn_model
 from cloudFCN.data.loader import load_paths

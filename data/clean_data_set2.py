@@ -6,7 +6,7 @@ import os
 import ast
 from skimage import transform
 
-sys.path.append('/Users/tosha_008/PycharmProjects/cloudFCN-master')
+sys.path.append('/')
 from cloudFCN.data import Constants
 
 """
