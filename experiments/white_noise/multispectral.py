@@ -3,14 +3,11 @@ Experiment on noise tolerance
 """
 import sys
 import os
-import numpy as np
-import matplotlib.pyplot as plt
 from keras.models import load_model
 
 from cloudFCN.data import loader, transformations as trf
-from cloudFCN.data.Datasets import LandsatDataset
-from cloudFCN import callbacks
-from cloudFCN.experiments import custom_callbacks
+from data.Datasets import LandsatDataset
+from experiments import custom_callbacks
 
 
 SIGNAL = 12.8

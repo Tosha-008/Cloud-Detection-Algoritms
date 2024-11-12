@@ -1,21 +1,21 @@
-from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
-from tensorflow.keras.optimizers import Adagrad, SGD, Adadelta, Adam
+from tensorflow.keras.models import load_model
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.optimizers import Adadelta, Adam
 import tensorflow as tf
 
 import json
 import sys
 import os
 
-project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
+project_path = "/Users/mbc-air/Downloads/cloudFCN-master-Tosha-008-colab_1"
 sys.path.append(project_path)
 tf.config.threading.get_inter_op_parallelism_threads()
 
 # OUR STUFF
 from cloudFCN.data import loader, transformations as trf
-from cloudFCN.data.Datasets import LandsatDataset, train_valid_test, randomly_reduce_list
-from cloudFCN import models, callbacks
-from cloudFCN.experiments import custom_callbacks
+from data.Datasets import LandsatDataset, train_valid_test, randomly_reduce_list
+from cloudFCN import models
+from experiments import custom_callbacks
 from MFCNN import model_mfcnn_def
 from cxn import cxn_model
 from cloudFCN.data.loader import load_paths
@@ -66,8 +66,8 @@ def fit_model(config):
 
     if not train_set:
         train_path, valid_paths, test_paths = train_valid_test(data_path,
-                                                               train_ratio=0.96,
-                                                               test_ratio=0,
+                                                               train_ratio=0.8,
+                                                             #  test_ratio=0,
                                                                dataset=dataset_name,
                                                                only_test=False,
                                                                no_test=True)
@@ -106,7 +106,7 @@ def fit_model(config):
         shuffle=True,
         num_classes=num_classes,
         num_channels=num_channels,
-        remove_mask_chanels=False)
+        left_mask_channels=num_classes)
 
     foga_valid_sets = [LandsatDataset(valid_path, save_cache=False) for valid_path in valid_paths]
     foga_valid_loaders = [
@@ -121,7 +121,7 @@ def fit_model(config):
             shuffle=False,
             num_classes=num_classes,
             num_channels=num_channels,
-            remove_mask_chanels=False) for valid_set in foga_valid_sets]
+            left_mask_channels=num_classes) for valid_set in foga_valid_sets]
 
     summary_valid_set = randomly_reduce_list(summary_valid_set, summary_valid_percent)
     summary_batch_size = 12
@@ -137,7 +137,7 @@ def fit_model(config):
         shuffle=False,
         num_classes=num_classes,
         num_channels=num_channels,
-        remove_mask_chanels=False)
+        left_mask_channels=num_classes)
 
     if model_load_path:
         model = load_model(model_load_path)

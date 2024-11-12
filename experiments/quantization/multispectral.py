@@ -3,21 +3,18 @@ Experiment on noise tolerance
 """
 import sys
 import os
-import numpy as np
-import matplotlib.pyplot as plt
 from keras.models import load_model
 
 from cloudFCN.data import loader, transformations as trf
-from cloudFCN.data.Datasets import LandsatDataset
-from cloudFCN import callbacks
-from cloudFCN.experiments import custom_callbacks
+from data.Datasets import LandsatDataset
+from experiments import custom_callbacks
 
 
 SIGNAL = 12.8
 
 patch_size = 206
 batch_size = 12
-bands = [3, 2, 1, 11]
+bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
 num_channels = len(bands)
 modelpath = sys.argv[1]
 model = load_model(modelpath)
@@ -95,7 +92,7 @@ dataloaders6 = [loader.dataloader(dataset, batch_size, patch_size, shuffle=False
 datagens6 = [dataloader() for dataloader in dataloaders6]
 
 
-callback0 = custom_callbacks.foga_table5_Callback_no_thin(datasets, datagens0)
+callback0 = e.foga_table5_Callback_no_thin(datasets, datagens0)
 callback1 = custom_callbacks.foga_table5_Callback_no_thin(datasets, datagens1)
 callback2 = custom_callbacks.foga_table5_Callback_no_thin(datasets, datagens2)
 callback3 = custom_callbacks.foga_table5_Callback_no_thin(datasets, datagens3)

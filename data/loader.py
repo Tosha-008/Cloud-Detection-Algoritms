@@ -8,13 +8,13 @@ import pickle
 
 
 def dataloader(dataset, batch_size, patch_size, transformations=None,
-               shuffle=False, num_classes=5, num_channels=12, remove_mask_chanels=False):
+               shuffle=False, num_classes=5, num_channels=12, left_mask_channels=3):
     """
     Function to create pipeline for dataloading, creating batches of image/mask pairs.
 
     Parameters
     ----------
-    remove_mask_chanels
+    left_mask_chanels
     dataset : Dataset
         Contains paths for all image/mask pairs to be sampled.
     batch_size : int
@@ -70,8 +70,8 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
                 if np.any(np.isnan(mask)) or np.any(np.isinf(mask)):
                     print(f"Invalid mask data at index {idx}: {mask}")
 
-                if remove_mask_chanels:
-                    mask = mask[:, :, [-1]]
+                if left_mask_channels:
+                    mask = mask[:, :, -left_mask_channels:]
                 ims[batch_i] = im
                 masks[batch_i] = mask
 
