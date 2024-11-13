@@ -233,9 +233,6 @@ def randomly_reduce_list(paths, factor):
     return sampled_paths
 
 
-
-
-
 if __name__ == '__main__':
     import sys
 

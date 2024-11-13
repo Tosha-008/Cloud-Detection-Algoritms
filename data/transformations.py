@@ -363,3 +363,32 @@ def normalize_to_range(min_value=0.0, max_value=1.0):
         return img, mask
 
     return apply_transform
+
+def sentinel_13_to_11():
+    def apply_transform(img, mask):
+
+        if img.shape[-1] != 13:
+            print(f"Skipping: expected 13 channels, found {img.shape[-1]}")
+            pass
+        height, width = img.shape[:2]
+        black_layer = np.zeros((height, width, 1), dtype=img.dtype)
+        avg_B5_B6_B7 = (img[:, :, 4] + img[:, :, 5] + img[:, :, 6]) / 3
+
+        selected_channels = [
+            img[:, :, 3],  # Band 4 (Red)
+            img[:, :, 2],  # Band 3 (Green)
+            img[:, :, 1],  # Band 2 (Blue)
+            img[:, :, 0],  # Band 1 (Coastal Aerosol)
+            img[:, :, 8],  # Band 8A (Vegetation Red Edge)
+            img[:, :, 11],  # Band 11 (SWIR 1)
+            img[:, :, 12],  # Band 12 (SWIR 2)
+            avg_B5_B6_B7,  # B5, B6, B7
+            img[:, :, 10],  # Band 10 (Cirrus)
+            img[:, :, 7],  # Band 8 (NIR)
+            img[:, :, 9]  # Band 9 (Water Vapor)
+        ]
+
+        final_image = np.stack(selected_channels, axis=-1)
+        img = np.concatenate((final_image, black_layer), axis=-1)  # Nodata layer
+        return img, mask
+    return apply_transform
