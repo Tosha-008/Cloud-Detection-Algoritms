@@ -12,18 +12,18 @@ bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
 batch_size = 10
 num_classes = 3
 num_channels = len(bands)
-num_batches_to_show = 10
+num_batches_to_show = 5
 
-model_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_15_350_2.keras"
+model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_15_350_2.keras"
 metrics_path = "/Users/mbc-air/Downloads/cloudFCN-master-Tosha-008-colab_1/training_history_mfcnn.json"
 dataset_path = "/Volumes/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
-dataset_path_3 = '/Volumes/Vault/Splited_set_2_384'  # Sentinel 2 for test
+dataset_path_2_2 = '/media/ladmin/Vault/Splited_set_2_384'  # Set 2 for test other PC
 
 sentinel_img_dir = "/Users/tosha_008/Downloads/Sentinel_2/subscenes_splited_384"
 sentinel_mask_dir = "/Users/tosha_008/Downloads/Sentinel_2/masks_splited_384"
 
-test_loader_path = None
+test_loader_path = '/home/ladmin/PycharmProjects/cloudFCN-master/output/test_paths_Set_2_35.pkl'
 
 dataset_1 = "Biome"
 dataset_2 = "Set_2"
@@ -33,7 +33,7 @@ model_name_1 = "mfcnn"
 model_name_2 = "cloudfcn"
 model_name_3 = "cxn"
 
-main_set = dataset_3
+main_set = dataset_2
 main_model = model_name_1
 
 custom_objects = {
@@ -55,7 +55,7 @@ if main_set == "Biome" or main_set == "Set_2":
     test_set = load_paths(test_loader_path)
 
     if not test_set:
-        train_path, valid_paths, test_paths = train_valid_test(dataset_path_2,
+        train_path, valid_paths, test_paths = train_valid_test(dataset_path_2_2,
                                                                train_ratio=0.7,
                                                                test_ratio=0.1,
                                                                dataset=main_set,
@@ -68,9 +68,9 @@ if main_set == "Biome" or main_set == "Set_2":
         test_set, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=True),
                          trf.band_select(bands),
-                         trf.class_merge(3, 4),  # If Biome
-                         trf.class_merge(1, 2),  # If Biome
-                         # trf.class_merge(2, 3),  # If Set 2
+                         #  trf.class_merge(3, 4),  # If Biome
+                         #  trf.class_merge(1, 2),  # If Biome
+                         trf.class_merge(2, 3),  # If Set 2
                          # trf.class_merge(0, 1),  # If Set 2
                          trf.normalize_to_range()
                          ],
@@ -79,7 +79,7 @@ if main_set == "Biome" or main_set == "Set_2":
         num_channels=num_channels,
         left_mask_channels=num_classes)
 
-if main_set == ("Sentinel_2"):
+if main_set == "Sentinel_2":
     sentinel_set = img_mask_pair(sentinel_img_dir, sentinel_mask_dir)
 
     test_ = loader.dataloader(
@@ -98,8 +98,8 @@ find_alpha(gen=test_,
            num_batches_to_show=num_batches_to_show,
            dataset_name=main_set,
            model_name=main_model,
-           alpha_values=np.arange(0, 1, 0.02),
-           output_file='alpha_mfcnn_sentinel_0_1_002.csv')
+           alpha_values=np.arange(0.9, 1, 0.01),
+           output_file=f'alpha_{main_model}_{main_set}_09_1_001.csv')
 
 # count_average_metrics(gen=test_,
 #                       model=model,

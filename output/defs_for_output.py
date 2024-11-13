@@ -57,8 +57,8 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
         alpha = 0.9
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
     elif model_name == 'cxn':
-        alpha = 0.95
-        pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
+        alpha = 0.9
+        pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
     if dataset_name == 'Biome':
         accuracy, precision, recall, f1 = calculate_metrics(mask[:, :, -1].squeeze(), pred_mask_binary)
@@ -155,10 +155,10 @@ def count_average_metrics(gen, model, num_batches_to_show, dataset_name='Biome',
             if model_name == 'cloudfcn':
                 pred_mask_binary = (pred_mask[:, :, -2] < 0.95).astype(float)
             elif model_name == 'mfcnn':
-                alpha = 0.5
+                alpha = 0.9
                 pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
             elif model_name == 'cxn':
-                alpha = 0.99
+                alpha = 0.9
                 pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
 
             if dataset_name == 'Biome':
@@ -243,21 +243,19 @@ def find_alpha(gen, model, num_batches_to_show, dataset_name='Biome', model_name
                 pred_mask = predictions[j]
 
                 # Apply threshold based on alpha and model_name
-                if model_name == 'cloudfcn':
+                if model_name == "cloudfcn":
                     pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
-                elif model_name == 'mfcnn':
+                elif model_name == "mfcnn":
                     pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
-                elif model_name == 'cxn':
-                    pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
-
+                elif model_name == "cxn":
+                    pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
                 # Select the right layer based on dataset_name
-                if dataset_name == 'Biome' :
+                if dataset_name == "Biome" :
                     accuracy, precision, recall, f1 = calculate_metrics(mask[:, :, -1].squeeze(), pred_mask_binary)
-                elif model_name == 'Set_2':
+                elif dataset_name == "Set_2":
                     accuracy, precision, recall, f1 = calculate_metrics(mask[:, :, -1].squeeze(), pred_mask_binary)
-                elif dataset_name == 'Sentinel_2':
+                elif dataset_name == "Sentinel_2":
                     accuracy, precision, recall, f1 = calculate_metrics(mask[:, :, -2].squeeze(), pred_mask_binary)
-
                 all_accuracies.append(accuracy)
                 all_precisions.append(precision)
                 all_recalls.append(recall)
@@ -278,7 +276,7 @@ def find_alpha(gen, model, num_batches_to_show, dataset_name='Biome', model_name
             writer = csv.writer(file)
             writer.writerow([alpha, avg_accuracy, avg_precision, avg_recall, avg_f1])
 
-        # Update best alpha if this alpha has a higher average F1 score
+        # Update the best alpha if this alpha has a higher average F1 score
         if avg_f1 > best_avg_f1:
             best_avg_f1 = avg_f1
             best_alpha = alpha
