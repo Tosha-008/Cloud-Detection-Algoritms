@@ -158,7 +158,7 @@ def fit_model(config):
                       optimizer=optimizer)
         model.summary()
 
-    elif model_name == "cxn":
+    elif model_name == "cxn_Set2":
         model = cxn_model.model_arch(input_rows=patch_size, input_cols=patch_size, num_of_channels=num_channels,
                                      num_of_classes=num_classes)
         optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)

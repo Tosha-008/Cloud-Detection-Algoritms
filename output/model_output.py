@@ -14,10 +14,11 @@ num_classes = 3
 num_channels = len(bands)
 num_batches_to_show = 5
 
-model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_15_350_2.keras"
+model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/model_cloudfcn_8_250.keras"
 metrics_path = "/Users/mbc-air/Downloads/cloudFCN-master-Tosha-008-colab_1/training_history_mfcnn.json"
 dataset_path = "/Volumes/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
+set2_398 = "/media/ladmin/Vault/Splited_set_2_398"  # Set 2 398 for test
 dataset_path_2_2 = '/media/ladmin/Vault/Splited_set_2_384'  # Set 2 for test other PC
 
 sentinel_img_dir = "/Users/tosha_008/Downloads/Sentinel_2/subscenes_splited_384"
@@ -31,10 +32,14 @@ dataset_3 = "Sentinel_2"
 
 model_name_1 = "mfcnn"
 model_name_2 = "cloudfcn"
-model_name_3 = "cxn"
+model_name_3 = "cxn_Set2"
 
 main_set = dataset_2
-main_model = model_name_1
+main_model = model_name_2
+
+if main_model=='cloudfcn' and main_set=='Set_2':
+    test_loader_path = "/home/ladmin/PycharmProjects/cloudFCN-master/output/test_paths_Set_2_35_398.pkl"
+    patch_size = 398
 
 custom_objects = {
     'MultiscaleLayer': MultiscaleLayer,
@@ -51,17 +56,16 @@ model = load_model(model_path, custom_objects=custom_objects)
 
 
 if main_set == "Biome" or main_set == "Set_2":
-
     test_set = load_paths(test_loader_path)
 
     if not test_set:
-        train_path, valid_paths, test_paths = train_valid_test(dataset_path_2_2,
+        train_path, valid_paths, test_paths = train_valid_test(set2_398,
                                                                train_ratio=0.7,
                                                                test_ratio=0.1,
                                                                dataset=main_set,
                                                                only_test=True,
                                                                no_test=False)
-        test_set = LandsatDataset(test_paths, cache_file=f"test_paths_{main_set}_{len(test_paths)}.pkl",
+        test_set = LandsatDataset(test_paths, cache_file=f"test_paths_{main_set}_{len(test_paths)}_398.pkl",
                                   save_cache=True)
 
     test_ = loader.dataloader(
@@ -74,7 +78,7 @@ if main_set == "Biome" or main_set == "Set_2":
                          # trf.class_merge(0, 1),  # If Set 2
                          trf.normalize_to_range()
                          ],
-        shuffle=False,
+        shuffle=True,
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
@@ -93,13 +97,13 @@ if main_set == "Sentinel_2":
         num_channels=num_channels,
         left_mask_channels=num_classes)
 
-find_alpha(gen=test_,
-           model=model,
-           num_batches_to_show=num_batches_to_show,
-           dataset_name=main_set,
-           model_name=main_model,
-           alpha_values=np.arange(0.9, 1, 0.01),
-           output_file=f'alpha_{main_model}_{main_set}_09_1_001.csv')
+# find_alpha(gen=test_,
+#            model=model,
+#            num_batches_to_show=num_batches_to_show,
+#            dataset_name=main_set,
+#            model_name=main_model,
+#            alpha_values=np.arange(0.9, 1, 0.01),
+#            output_file=f'alpha_{main_model}_{main_set}_09_1_001.csv')
 
 # count_average_metrics(gen=test_,
 #                       model=model,
@@ -107,12 +111,12 @@ find_alpha(gen=test_,
 #                       dataset_name=main_set,
 #                       model_name=main_model)
 
-# plot_batches(gen=test_,
-#              model=model,
-#              num_batches_to_show=num_batches_to_show,
-#              show_masks_pred=False,
-#              dataset_name=main_set,
-#              model_name=main_model)
+plot_batches(gen=test_,
+             model=model,
+             num_batches_to_show=num_batches_to_show,
+             show_masks_pred=False,
+             dataset_name=main_set,
+             model_name=main_model)
 
 # Plot metrics only if specified
 plot_metrics(metrics_path, show_metrics=False)

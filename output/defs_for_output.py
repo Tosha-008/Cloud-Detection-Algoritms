@@ -52,11 +52,12 @@ def compute_average_metrics(all_accuracies, all_precisions, all_recalls, all_f1s
 
 def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pred=False, dataset_name='Biome', model_name='cloudfcn'):
     if model_name == 'cloudfcn':
-        pred_mask_binary = (pred_mask[:, :, -2] < 0.95).astype(float)
+        alpha = 0.5
+        pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
     elif model_name == 'mfcnn':
         alpha = 0.9
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
-    elif model_name == 'cxn':
+    elif model_name == 'cxn_Set2':
         alpha = 0.9
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
@@ -157,7 +158,7 @@ def count_average_metrics(gen, model, num_batches_to_show, dataset_name='Biome',
             elif model_name == 'mfcnn':
                 alpha = 0.9
                 pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
-            elif model_name == 'cxn':
+            elif model_name == 'cxn_Set2':
                 alpha = 0.9
                 pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
 
@@ -244,10 +245,10 @@ def find_alpha(gen, model, num_batches_to_show, dataset_name='Biome', model_name
 
                 # Apply threshold based on alpha and model_name
                 if model_name == "cloudfcn":
-                    pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
+                    pred_mask_binary = (pred_mask[:, :, -1] < alpha).astype(float)
                 elif model_name == "mfcnn":
                     pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
-                elif model_name == "cxn":
+                elif model_name == "cxn_Set2":
                     pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
                 # Select the right layer based on dataset_name
                 if dataset_name == "Biome" :
