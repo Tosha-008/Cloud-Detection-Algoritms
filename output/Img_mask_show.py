@@ -94,3 +94,4 @@ print(mask.shape)
 #         show_image_mask(image, mask)
 
 show_image_mask(image, mask)
+

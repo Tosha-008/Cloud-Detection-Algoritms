@@ -44,7 +44,7 @@ def get_model(config):
             num_channels=num_channels, num_classes=num_classes)
         optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)
         model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'], optimizer=optimizer)
-    elif model_name == "cxn_Set2":
+    elif model_name == "cxn":
         model = cxn_model.model_arch(input_rows=config['fit_options']['patch_size'],
                                      input_cols=config['fit_options']['patch_size'],
                                      num_of_channels=num_channels,

@@ -12,10 +12,10 @@ bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
 batch_size = 10
 num_classes = 3
 num_channels = len(bands)
-num_batches_to_show = 5
+num_batches_to_show = 2
 
-model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/model_cloudfcn_8_250.keras"
-metrics_path = "/Users/mbc-air/Downloads/cloudFCN-master-Tosha-008-colab_1/training_history_mfcnn.json"
+model_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_15_350_2.keras"
+metrics_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master/training_history/training_history_mfcnn_384_15_350.json"
 dataset_path = "/Volumes/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
 set2_398 = "/media/ladmin/Vault/Splited_set_2_398"  # Set 2 398 for test
@@ -32,10 +32,10 @@ dataset_3 = "Sentinel_2"
 
 model_name_1 = "mfcnn"
 model_name_2 = "cloudfcn"
-model_name_3 = "cxn_Set2"
+model_name_3 = "cxn"
 
-main_set = dataset_2
-main_model = model_name_2
+main_set = dataset_3
+main_model = model_name_1
 
 if main_model=='cloudfcn' and main_set=='Set_2':
     test_loader_path = "/home/ladmin/PycharmProjects/cloudFCN-master/output/test_paths_Set_2_35_398.pkl"
@@ -111,12 +111,12 @@ if main_set == "Sentinel_2":
 #                       dataset_name=main_set,
 #                       model_name=main_model)
 
-plot_batches(gen=test_,
-             model=model,
-             num_batches_to_show=num_batches_to_show,
-             show_masks_pred=False,
-             dataset_name=main_set,
-             model_name=main_model)
+# plot_batches(gen=test_,
+#              model=model,
+#              num_batches_to_show=num_batches_to_show,
+#              show_masks_pred=False,
+#              dataset_name=main_set,
+#              model_name=main_model)
 
 # Plot metrics only if specified
-plot_metrics(metrics_path, show_metrics=False)
+plot_metrics(metrics_path, show_metrics=True)

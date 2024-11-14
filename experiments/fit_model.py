@@ -7,18 +7,18 @@ import json
 import sys
 import os
 
-project_path = "/Users/mbc-air/Downloads/cloudFCN-master-Tosha-008-colab_1"
+project_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master"
 sys.path.append(project_path)
 tf.config.threading.get_inter_op_parallelism_threads()
 
 # OUR STUFF
-from cloudFCN.data import loader, transformations as trf
+from data import loader, transformations as trf
 from data.Datasets import LandsatDataset, train_valid_test, randomly_reduce_list
 from cloudFCN import models
 from experiments import custom_callbacks
 from MFCNN import model_mfcnn_def
 from cxn import cxn_model
-from cloudFCN.data.loader import load_paths
+from data.loader import load_paths
 
 
 def fit_model(config):
@@ -152,13 +152,13 @@ def fit_model(config):
 
     elif model_name == "mfcnn":
         model = model_mfcnn_def.build_model_mfcnn(
-            num_channels=num_channels, num_classes=num_classes)
+            num_channels=num_channels, num_classes=num_classes, dropout_p=0.5)
         optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)
         model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'],
                       optimizer=optimizer)
         model.summary()
 
-    elif model_name == "cxn_Set2":
+    elif model_name == "cxn":
         model = cxn_model.model_arch(input_rows=patch_size, input_cols=patch_size, num_of_channels=num_channels,
                                      num_of_classes=num_classes)
         optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)

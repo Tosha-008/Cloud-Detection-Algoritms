@@ -57,7 +57,7 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
     elif model_name == 'mfcnn':
         alpha = 0.9
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
-    elif model_name == 'cxn_Set2':
+    elif model_name == 'cxn':
         alpha = 0.9
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
@@ -158,7 +158,7 @@ def count_average_metrics(gen, model, num_batches_to_show, dataset_name='Biome',
             elif model_name == 'mfcnn':
                 alpha = 0.9
                 pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
-            elif model_name == 'cxn_Set2':
+            elif model_name == 'cxn':
                 alpha = 0.9
                 pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
 
@@ -248,7 +248,7 @@ def find_alpha(gen, model, num_batches_to_show, dataset_name='Biome', model_name
                     pred_mask_binary = (pred_mask[:, :, -1] < alpha).astype(float)
                 elif model_name == "mfcnn":
                     pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
-                elif model_name == "cxn_Set2":
+                elif model_name == "cxn":
                     pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
                 # Select the right layer based on dataset_name
                 if dataset_name == "Biome" :
