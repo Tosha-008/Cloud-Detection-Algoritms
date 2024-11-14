@@ -153,7 +153,7 @@ def fit_model(config):
     elif model_name == "mfcnn":
         model = model_mfcnn_def.build_model_mfcnn(
             num_channels=num_channels, num_classes=num_classes, dropout_p=0.5)
-        optimizer = Adam(learning_rate=1e-4, clipnorm=1.0)
+        optimizer = Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
         model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'],
                       optimizer=optimizer)
         model.summary()

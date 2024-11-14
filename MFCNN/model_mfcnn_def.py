@@ -2,25 +2,33 @@ from keras.layers import Input, Conv2D, Concatenate, BatchNormalization, \
     LeakyReLU, Conv2DTranspose, Activation, Reshape, MaxPooling2D, AveragePooling2D, UpSampling2D, Dropout, Layer
 from keras.models import Model
 import tensorflow as tf
-from tensorflow.keras.optimizers import Adadelta
-from keras.regularizers import l2
-
+from tensorflow.keras.optimizers import Adadelta, Adam
+from tensorflow.keras.initializers import RandomNormal, Constant
+from tensorflow.keras.layers import Conv2D, BatchNormalization, LeakyReLU, Layer
+from tensorflow.keras.regularizers import l2
 
 class DoubleConv(Layer):
-    def __init__(self, out_channels, mid_channels=None, l2_reg=0.01, **kwargs):
+    def __init__(self, out_channels, mid_channels=None, l2_reg=0.01,
+                 kernel_initializer='glorot_uniform', bias_initializer='zeros', **kwargs):
         super(DoubleConv, self).__init__(**kwargs)
         self.out_channels = out_channels
         self.mid_channels = mid_channels if mid_channels is not None else out_channels
         self.l2_reg = l2_reg
+        self.kernel_initializer = kernel_initializer
+        self.bias_initializer = bias_initializer
 
     def build(self, input_shape):
         self.conv1 = Conv2D(self.mid_channels, (3, 3), strides=1, padding='same',
-                            kernel_initializer='glorot_uniform', kernel_regularizer=l2(self.l2_reg))
+                            kernel_initializer=self.kernel_initializer,
+                            bias_initializer=self.bias_initializer,
+                            kernel_regularizer=l2(self.l2_reg))
         self.bn1 = BatchNormalization(axis=-1, momentum=0.99)
         self.act1 = LeakyReLU(negative_slope=0.01)
 
         self.conv2 = Conv2D(self.out_channels, (3, 3), strides=1, padding='same',
-                            kernel_initializer='glorot_uniform', kernel_regularizer=l2(self.l2_reg))
+                            kernel_initializer=self.kernel_initializer,
+                            bias_initializer=self.bias_initializer,
+                            kernel_regularizer=l2(self.l2_reg))
         self.bn2 = BatchNormalization(axis=-1, momentum=0.99)
         self.act2 = LeakyReLU(negative_slope=0.01)
 
@@ -37,21 +45,31 @@ class DoubleConv(Layer):
 
 
 class FMM(Layer):
-    def __init__(self, l2_reg=0.01, **kwargs):
+    def __init__(self, l2_reg=0.01, kernel_initializer='glorot_uniform', bias_initializer='zeros', **kwargs):
         super(FMM, self).__init__(**kwargs)
         self.l2_reg = l2_reg
+        self.kernel_initializer = kernel_initializer
+        self.bias_initializer = bias_initializer
 
     def build(self, input_shape):
         self.stage1_conv = Conv2D(64, (3, 3), strides=2, padding='same',
-                                  kernel_initializer='glorot_uniform', kernel_regularizer=l2(self.l2_reg))
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=l2(self.l2_reg))
         self.stage1_act = LeakyReLU(negative_slope=0.01)
-        self.stage1_dc = DoubleConv(128, 96, l2_reg=self.l2_reg)
+        self.stage1_dc = DoubleConv(128, 96, l2_reg=self.l2_reg,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer)
 
         self.stage2_max = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')
-        self.stage2_dc = DoubleConv(256, 192, l2_reg=self.l2_reg)
+        self.stage2_dc = DoubleConv(256, 192, l2_reg=self.l2_reg,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer)
 
         self.stage3_max = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')
-        self.stage3_dc = DoubleConv(512, 256, l2_reg=self.l2_reg)
+        self.stage3_dc = DoubleConv(512, 256, l2_reg=self.l2_reg,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer)
 
     def call(self, inputs):
         x = self.stage1_conv(inputs)
@@ -68,17 +86,26 @@ class FMM(Layer):
 
 
 class ScaleBlock(Layer):
-    def __init__(self, pool_size, l2_reg=0.01, **kwargs):
+    def __init__(self, pool_size, l2_reg=0.01, kernel_initializer='glorot_uniform',
+                 bias_initializer='zeros', **kwargs):
         super(ScaleBlock, self).__init__(**kwargs)
         self.pool_size = pool_size
         self.l2_reg = l2_reg
+        self.kernel_initializer = kernel_initializer
+        self.bias_initializer = bias_initializer
 
     def build(self, input_shape):
         self.avg_pool = AveragePooling2D(pool_size=(self.pool_size, self.pool_size))
-        self.conv1 = Conv2D(256, (1, 1), padding='valid', kernel_regularizer=l2(self.l2_reg))
+        self.conv1 = Conv2D(256, (1, 1), padding='valid',
+                            kernel_regularizer=l2(self.l2_reg),
+                            kernel_initializer=self.kernel_initializer,
+                            bias_initializer=self.bias_initializer)
         self.relu1 = LeakyReLU(negative_slope=0.01)
         self.upsample = UpSampling2D(size=(self.pool_size, self.pool_size), interpolation='bilinear')
-        self.conv2 = Conv2D(256, (3, 3), padding='same', kernel_regularizer=l2(self.l2_reg))
+        self.conv2 = Conv2D(256, (3, 3), padding='same',
+                            kernel_regularizer=l2(self.l2_reg),
+                            kernel_initializer=self.kernel_initializer,
+                            bias_initializer=self.bias_initializer)
         self.relu2 = LeakyReLU(negative_slope=0.01)
 
     def call(self, inputs):
@@ -111,15 +138,25 @@ class PaddingLayer(Layer):
 
 
 class MultiscaleLayer(Layer):
-    def __init__(self, **kwargs):
+    def __init__(self, l2_reg=0.01, kernel_initializer='glorot_uniform', bias_initializer='zeros', **kwargs):
         super(MultiscaleLayer, self).__init__(**kwargs)
+        self.l2_reg = l2_reg
+        self.kernel_initializer = kernel_initializer
+        self.bias_initializer = bias_initializer
 
     def build(self, input_shape):
-        self.scale_block_16 = ScaleBlock(16)
-        self.scale_block_8 = ScaleBlock(8)
-        self.scale_block_4 = ScaleBlock(4)
-        self.scale_block_2 = ScaleBlock(2)
-
+        self.scale_block_16 = ScaleBlock(16, l2_reg=self.l2_reg,
+                                         kernel_initializer=self.kernel_initializer,
+                                         bias_initializer=self.bias_initializer)
+        self.scale_block_8 = ScaleBlock(8, l2_reg=self.l2_reg,
+                                        kernel_initializer=self.kernel_initializer,
+                                        bias_initializer=self.bias_initializer)
+        self.scale_block_4 = ScaleBlock(4, l2_reg=self.l2_reg,
+                                        kernel_initializer=self.kernel_initializer,
+                                        bias_initializer=self.bias_initializer)
+        self.scale_block_2 = ScaleBlock(2, l2_reg=self.l2_reg,
+                                        kernel_initializer=self.kernel_initializer,
+                                        bias_initializer=self.bias_initializer)
         self.padding_layer = PaddingLayer()
 
     def call(self, inputs):
@@ -138,20 +175,26 @@ class MultiscaleLayer(Layer):
 
         return tf.concat([x1, x2, x3, x4], axis=-1)
 
-
 class Up(Layer):
-    def __init__(self, out_channels, bn=False, l2_reg=0.01, **kwargs):
+    def __init__(self, out_channels, bn=False, l2_reg=0.01, kernel_initializer='glorot_uniform',
+                 bias_initializer='zeros', **kwargs):
         super(Up, self).__init__(**kwargs)
         self.bn = bn
         self.out_channels = out_channels
         self.l2_reg = l2_reg
+        self.kernel_initializer = kernel_initializer
+        self.bias_initializer = bias_initializer
 
     def build(self, input_shape):
         self.conv = Conv2D(self.out_channels, (3, 3), padding='same',
-                           kernel_initializer='glorot_uniform', kernel_regularizer=l2(self.l2_reg))
+                           kernel_initializer=self.kernel_initializer,
+                           bias_initializer=self.bias_initializer,
+                           kernel_regularizer=l2(self.l2_reg))
         self.upsample = UpSampling2D(size=(2, 2), interpolation='bilinear')
+
         if self.bn:
             self.bn_layer = BatchNormalization(axis=-1, momentum=0.99)
+
         self.activation = LeakyReLU(negative_slope=0.01)
 
     def call(self, inputs):
@@ -162,15 +205,19 @@ class Up(Layer):
         x = self.upsample(x)
         return x
 
-
 class OutConv(Layer):
-    def __init__(self, out_channels, l2_reg=0.01, **kwargs):
+    def __init__(self, out_channels, l2_reg=0.01, kernel_initializer='glorot_uniform',
+                 bias_initializer='zeros', **kwargs):
         super(OutConv, self).__init__(**kwargs)
         self.out_channels = out_channels
         self.l2_reg = l2_reg
+        self.kernel_initializer = kernel_initializer
+        self.bias_initializer = bias_initializer
 
     def build(self, input_shape):
-        self.conv = Conv2D(self.out_channels, (1, 1), kernel_initializer='glorot_uniform',
+        self.conv = Conv2D(self.out_channels, (1, 1),
+                           kernel_initializer=self.kernel_initializer,
+                           bias_initializer=self.bias_initializer,
                            kernel_regularizer=l2(self.l2_reg))
 
     def call(self, inputs):
@@ -232,9 +279,13 @@ def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2, l2_reg=0.00
 
     inputs = Input(shape=(None, None, num_channels))
 
+    weight_initializer = RandomNormal(mean=0.0, stddev=0.01)
+    bias_initializer = Constant(value=0.1)
+
     # feature map module
-    fmm = FMM(l2_reg=l2_reg)
-    multiscale_layer = MultiscaleLayer()
+    fmm = FMM(l2_reg=l2_reg, kernel_initializer=weight_initializer, bias_initializer=bias_initializer)
+    multiscale_layer = MultiscaleLayer(l2_reg=l2_reg, kernel_initializer=weight_initializer, bias_initializer=bias_initializer)
+
 
     x1, x2, x3 = fmm(inputs)
 
@@ -244,25 +295,25 @@ def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2, l2_reg=0.00
     # # up-sampling module - Up1
     padbyup_1 = PadByUp()
     pad = padbyup_1((x3, x4))
-    up1_layer = Up(512, l2_reg=l2_reg)
+    up1_layer = Up(512, l2_reg=l2_reg, kernel_initializer=weight_initializer, bias_initializer=bias_initializer)
     up1 = up1_layer(pad)
     #
     # # up-sampling module - Up2
     padbyup_2 = PadByUp()
     pad = padbyup_2((x2, up1))
-    up2_layer = Up(256, bn=True, l2_reg=l2_reg)
+    up2_layer = Up(256, bn=True, l2_reg=l2_reg, kernel_initializer=weight_initializer, bias_initializer=bias_initializer)
     up2 = up2_layer(pad)
 
     # # up-sampling module - Up3
     padbyup_3 = PadByUp()
     pad = padbyup_3((x1, up2))
-    up3_layer = Up(128, bn=True, l2_reg=l2_reg)
+    up3_layer = Up(128, bn=True, l2_reg=l2_reg, kernel_initializer=weight_initializer, bias_initializer=bias_initializer)
     up3 = up3_layer(pad)
 
     dp = Dropout(rate=dropout_p)(up3)
 
     # output layer
-    out_conv = OutConv(num_classes, l2_reg=l2_reg)
+    out_conv = OutConv(num_classes, l2_reg=l2_reg, kernel_initializer=weight_initializer, bias_initializer=bias_initializer)
     outputs = out_conv(dp)
 
     if num_classes > 1:
@@ -274,7 +325,7 @@ def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2, l2_reg=0.00
 
 if __name__ == "__main__":
     model = build_model_mfcnn(num_channels=12, num_classes=3)
-    optimizer = Adadelta()
+    optimizer = Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
 
     model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'], optimizer=optimizer)
     model.summary()
