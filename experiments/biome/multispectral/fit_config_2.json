@@ -1,15 +1,15 @@
 {
   "io_options":{
       "model_load_path":null,
-      "model_save_path":"/content/drive/MyDrive/Output/models",
-      "model_checkpoint_dir":"/content/driver/MyDrive/Output/checkpoints",
+      "model_save_path":"./models",
+      "model_checkpoint_dir":"./checkpoints",
       "model_name":"mfcnn",
-      "data_path":"/content/driver/MyDrive/Splited_data",
+      "data_path":"./Splited_biome_384",
       "dataset_name":"Biome",
 
-      "train_loader_path": "/content/drive/MyDrive/loader_paths/cache_train_Biome_77_398.pkl",
-      "valid_loader_path": "/content/drive/MyDrive/loader_paths/cache_valid_Biome_19_398.pkl",
-      "test_loader_path": "/content/drive/MyDrive/loader_paths/cache_test_Biome_0.pkl",
+      "train_loader_path": null,
+      "valid_loader_path": null,
+      "test_loader_path": null,
 
       "summary_valid_percent":0.1
    },
@@ -21,9 +21,9 @@
        },
 
    "fit_options":{
-      "patch_size":398,
-      "batch_size":4,
-      "epochs":2,
+      "patch_size":384,
+      "batch_size":12,
+      "epochs":1,
       "steps_per_epoch":5,
       "save_each_epoch":false,
       "save_final_epoch":true

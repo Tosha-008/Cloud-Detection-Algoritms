@@ -7,7 +7,7 @@ import json
 import sys
 import os
 
-project_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master"
+project_path = "/mnt/agent/system/working_dir"
 sys.path.append(project_path)
 tf.config.threading.get_inter_op_parallelism_threads()
 
@@ -58,11 +58,12 @@ def fit_model(config):
     else:
         num_channels = 12
 
-    train_set = load_paths(train_loader_path)
-    summary_valid_set, valid_paths = load_paths(valid_loader_path, valid=True)
-    if valid_paths:
-        valid_paths = list(dict.fromkeys(os.path.dirname(path) for path in valid_paths))
-    test_set = load_paths(test_loader_path)
+    train_set = None
+    # train_set = load_paths(train_loader_path)
+    # summary_valid_set, valid_paths = load_paths(valid_loader_path, valid=True)
+    # if valid_paths:
+    #     valid_paths = list(dict.fromkeys(os.path.dirname(path) for path in valid_paths))
+    # test_set = load_paths(test_loader_path)
 
     if not train_set:
         train_path, valid_paths, test_paths = train_valid_test(data_path,
