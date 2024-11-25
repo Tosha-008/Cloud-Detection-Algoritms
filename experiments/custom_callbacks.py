@@ -211,7 +211,7 @@ class foga_table5_Callback_no_thin(keras.callbacks.Callback):
                 print('\n {0: ^12},{1: ^12},{2: ^12},{3: ^12},{4: ^12}, '.format(biome, np.round(percent_correct, 3), np.round(
                     percent_omission, 3), np.round(percent_comission, 3), np.round(percent_cloud, 3)))
         self.model.save(
-            "/home/ladmin/PycharmProjects/cloudFCN-master/results/foga_multi_SNOWONLY/epoch{}_model_split1.keras".format(epoch))
+            "/home/ladmin/PycharmProjects/cloudFCN_master/results/foga_multi_SNOWONLY/epoch{}_model_split1.keras".format(epoch))
 
         return
 

@@ -47,7 +47,7 @@ image = np.load('/Users/tosha_008/Downloads/Sentinel_2/subscenes_splited_384/S2B
 mask = np.load('/Users/tosha_008/Downloads/Sentinel_2/masks_splited_384/S2B_MSIL1C_20180423T171859_N0206_R012_T14SMJ_20180423T204026_4.npy')
 print(mask.shape)
 # dataset_path = "/Volumes/Vault/Splited_biome_384"
-# test_loader_path = "/Users/mbc-air/Downloads/cloudFCN-master-Tosha-008-colab_1/cache_valid_Biome_19.pkl"
+# test_loader_path = "/Users/mbc-air/Downloads/cloudFCN_master-Tosha-008-colab_1/cache_valid_Biome_19.pkl"
 # dataset_name = "Biome"
 #
 # bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]

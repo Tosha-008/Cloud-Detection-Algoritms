@@ -1,9 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-file_path_1 = '/Users/tosha_008/PycharmProjects/cloudFCN-master/model_metrics/alpha_mfcnn_Set_2_09_1_001.csv'
-file_path_2 = '/Users/tosha_008/PycharmProjects/cloudFCN-master/model_metrics/alpha_cxn_Set_2_09_1_001.csv'
-file_path_3 = '/Users/tosha_008/PycharmProjects/cloudFCN-master/model_metrics/alpha_cloudfcn_Set_2_09_1_001.csv'
+file_path_1 = '//model_metrics/alpha_mfcnn_Set_2_0_1_005.csv'
+file_path_2 = '//model_metrics/alpha_cxn_Set_2_09_1_001.csv'
+file_path_3 = '//model_metrics/alpha_cloudfcn_Set_2_09_1_001.csv'
 
 data1 = pd.read_csv(file_path_1)
 data2 = pd.read_csv(file_path_2)

@@ -7,7 +7,7 @@ import json
 import sys
 import os
 
-project_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master"
+project_path = "/"
 sys.path.append(project_path)
 tf.config.threading.get_inter_op_parallelism_threads()
 

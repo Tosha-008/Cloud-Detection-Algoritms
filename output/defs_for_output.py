@@ -29,8 +29,8 @@ def show_image_mask(image, mask):
 
 def img_mask_pair(images_dir, masks_dir):
 
-    image_files = {os.path.basename(file): os.path.join(images_dir, file) for file in os.listdir(images_dir) if file.endswith('.npy')}
-    mask_files = {os.path.basename(file): os.path.join(masks_dir, file) for file in os.listdir(masks_dir) if file.endswith('.npy')}
+    image_files = {os.path.basename(file): os.path.join(images_dir, file) for file in os.listdir(images_dir) if file.endswith('.npy') and not file.startswith('._')}
+    mask_files = {os.path.basename(file): os.path.join(masks_dir, file) for file in os.listdir(masks_dir) if file.endswith('.npy') and not file.startswith('._')}
 
     matched_files = [(image_path, mask_files[filename]) for filename, image_path in image_files.items() if filename in mask_files]
 
@@ -40,9 +40,7 @@ def img_mask_pair(images_dir, masks_dir):
 
 
 def compute_average_metrics(all_accuracies, all_precisions, all_recalls, all_f1s):
-    """
-    Вычисление средних метрик для всего пакета изображений.
-    """
+
     avg_accuracy = np.mean(all_accuracies)
     avg_precision = np.mean(all_precisions)
     avg_recall = np.mean(all_recalls)
@@ -55,10 +53,10 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
         alpha = 0.5
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
     elif model_name == 'mfcnn':
-        alpha = 0.9
+        alpha = 0.35
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
     elif model_name == 'cxn':
-        alpha = 0.9
+        alpha = 0.45
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
     if dataset_name == 'Biome':
@@ -156,11 +154,11 @@ def count_average_metrics(gen, model, num_batches_to_show, dataset_name='Biome',
             if model_name == 'cloudfcn':
                 pred_mask_binary = (pred_mask[:, :, -2] < 0.95).astype(float)
             elif model_name == 'mfcnn':
-                alpha = 0.9
-                pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
+                alpha = 0.35
+                pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
             elif model_name == 'cxn':
-                alpha = 0.9
-                pred_mask_binary = (pred_mask[:, :, -2] < alpha).astype(float)
+                alpha = 0.45
+                pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
             if dataset_name == 'Biome':
                 accuracy, precision, recall, f1 = calculate_metrics(mask[:, :, -1].squeeze(), pred_mask_binary)
