@@ -5,9 +5,12 @@ import sys
 import os
 import ast
 from skimage import transform
+from osgeo import gdal
 
-sys.path.append('/')
-from cloudFCN.data import Constants
+project_path = "/"
+sys.path.append(project_path)
+
+from data import Constants
 
 """
 Script for cleaning biome dataset, downloaded from www.usgs.gov
@@ -165,8 +168,11 @@ if __name__ == '__main__':
                 dir_actuel) if os.path.isdir(os.path.join(dir_actuel, f))]
             biom_out_dir = os.path.join(out_path, os.path.split(dir_name)[-1])
             os.makedirs(biom_out_dir)
+            print('6')
+            print(tile_dirs)
 
             for tile_dir in tile_dirs:
+                print('7')
                 if is_valid_dir(tile_dir):
                     print(f"tile_dir is {tile_dir}")
                     print('Loading', os.path.split(tile_dir)[-1], '...')
@@ -181,20 +187,3 @@ if __name__ == '__main__':
                     print('\rSplit and saved', os.path.split(tile_dir)[-1])
                 else:
                     print(tile_dir, ' is not a valid biome dataset directory, skipping...')
-
-    # tile_dirs = [os.path.join(biome_data_path, f) for f in os.listdir(
-    #     biome_data_path) if os.path.isdir(os.path.join(biome_data_path, f))]
-    # for tile_dir in tile_dirs:
-    #     if is_valid_dir(tile_dir):
-    #         print('Loading', os.path.split(tile_dir)[-1], '...')
-    #         img_arr, mask_arr = clean_tile(
-    #             tile_dir, bands=bands, nodata_layer=nodata, downsample=downsample)
-    #         print('\rLoaded', os.path.split(tile_dir)[-1])
-    #         tile_out_path = os.path.join(out_path, os.path.split(tile_dir)[-1])
-    #         os.makedirs(tile_out_path)
-    #         print('Splitting and saving', os.path.split(tile_dir)[-1], '...')
-    #         split_and_save(img_arr, mask_arr, tile_out_path,
-    #                        splitsize, nodata_amount=nodata_threshold)
-    #         print('\rSplit and saved', os.path.split(tile_dir)[-1])
-    #     else:
-    #         print(tile_dir, ' is not a valid biome dataset directory, skipping...')

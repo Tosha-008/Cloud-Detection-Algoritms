@@ -6,8 +6,10 @@ import os
 import ast
 from skimage import transform
 
-sys.path.append('/')
-from cloudFCN.data import Constants
+project_path = "/"
+sys.path.append(project_path)
+
+from data import Constants
 
 """
 Script for cleaning biome dataset, downloaded from www.usgs.gov

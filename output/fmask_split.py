@@ -1,0 +1,3 @@
+from data.clean_biome_data import split_and_save_for_Fmask
+
+split_and_save_for_Fmask()

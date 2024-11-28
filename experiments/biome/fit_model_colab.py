@@ -7,8 +7,8 @@ import sys
 import os
 import shutil
 
-project_path = "/content/cloudFCN-master"
-# project_path = "/Users/tosha_008/PycharmProjects/cloudFCN-master"
+project_path = "/content/cloudFCN_master"
+# project_path = "/Users/tosha_008/PycharmProjects/cloudFCN_master"
 sys.path.append(project_path)
 
 # OUR STUFF

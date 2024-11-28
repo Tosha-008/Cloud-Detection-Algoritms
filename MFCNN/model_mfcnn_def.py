@@ -397,4 +397,4 @@ if __name__ == "__main__":
 
     model.compile(loss='categorical_crossentropy', metrics=['categorical_accuracy'], optimizer=optimizer)
     model.summary()
-    # model.save('/Users/tosha_008/PycharmProjects/cloudFCN-master/models/try_1.keras')
+    # model.save('/Users/tosha_008/PycharmProjects/cloudFCN_master/models/try_1.keras')

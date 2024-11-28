@@ -58,8 +58,8 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
                 im, mask = dataset[idx]
 
                 if isinstance(im, str) or isinstance(mask, str):
-                    im = np.load(im).astype('float')
-                    mask = np.load(mask)
+                    im = np.load(im, allow_pickle=True).astype('float')
+                    mask = np.load(mask, allow_pickle=True)
 
                 if transformations:
                     for transform in transformations:
