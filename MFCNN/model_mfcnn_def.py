@@ -43,6 +43,17 @@ class DoubleConv(Layer):
 
         return x
 
+    def get_config(self):
+        config = super(DoubleConv, self).get_config()
+        config.update({
+            "out_channels": self.out_channels,
+            "mid_channels": self.mid_channels,
+            "l2_reg": self.l2_reg,
+            "kernel_initializer": self.kernel_initializer,
+            "bias_initializer": self.bias_initializer
+        })
+        return config
+
 
 class FMM(Layer):
     def __init__(self, l2_reg=0.01, kernel_initializer='glorot_uniform', bias_initializer='zeros', **kwargs):
@@ -84,6 +95,16 @@ class FMM(Layer):
 
         return stage1_dc, stage2_dc, stage3_dc
 
+    def get_config(self):
+        config = super(FMM, self).get_config()
+        config.update({
+            "l2_reg": self.l2_reg,
+            "kernel_initializer": self.kernel_initializer,
+            "bias_initializer": self.bias_initializer
+        })
+        return config
+
+
 
 class ScaleBlock(Layer):
     def __init__(self, pool_size, l2_reg=0.01, kernel_initializer='glorot_uniform',
@@ -118,6 +139,16 @@ class ScaleBlock(Layer):
         relu2 = self.relu2(conv2)
         return relu2
 
+    def get_config(self):
+        config = super(ScaleBlock, self).get_config()
+        config.update({
+            "pool_size": self.pool_size,
+            "l2_reg": self.l2_reg,
+            "kernel_initializer": self.kernel_initializer,
+            "bias_initializer": self.bias_initializer
+        })
+        return config
+
 
 class PaddingLayer(Layer):
     def __init__(self, **kwargs):
@@ -135,6 +166,9 @@ class PaddingLayer(Layer):
         padded_inputs = tf.pad(inputs, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
 
         return padded_inputs
+
+    def get_config(self):
+        return super(PaddingLayer, self).get_config()
 
 
 class MultiscaleLayer(Layer):
@@ -175,6 +209,15 @@ class MultiscaleLayer(Layer):
 
         return tf.concat([x1, x2, x3, x4], axis=-1)
 
+    def get_config(self):
+        config = super(MultiscaleLayer, self).get_config()
+        config.update({
+            "l2_reg": self.l2_reg,
+            "kernel_initializer": self.kernel_initializer,
+            "bias_initializer": self.bias_initializer
+        })
+        return config
+
 class Up(Layer):
     def __init__(self, out_channels, bn=False, l2_reg=0.01, kernel_initializer='glorot_uniform',
                  bias_initializer='zeros', **kwargs):
@@ -205,6 +248,17 @@ class Up(Layer):
         x = self.upsample(x)
         return x
 
+    def get_config(self):
+        config = super(Up, self).get_config()
+        config.update({
+            "out_channels": self.out_channels,
+            "bn": self.bn,
+            "l2_reg": self.l2_reg,
+            "kernel_initializer": self.kernel_initializer,
+            "bias_initializer": self.bias_initializer
+        })
+        return config
+
 class OutConv(Layer):
     def __init__(self, out_channels, l2_reg=0.01, kernel_initializer='glorot_uniform',
                  bias_initializer='zeros', **kwargs):
@@ -223,6 +277,17 @@ class OutConv(Layer):
     def call(self, inputs):
         x = self.conv(inputs)
         return x
+
+
+    def get_config(self):
+        config = super(OutConv, self).get_config()
+        config.update({
+            "out_channels": self.out_channels,
+            "l2_reg": self.l2_reg,
+            "kernel_initializer": self.kernel_initializer,
+            "bias_initializer": self.bias_initializer
+        })
+        return config
 
 
 class PadByUp(Layer):
@@ -253,6 +318,9 @@ class PadByUp(Layer):
         tf.debugging.assert_equal(tf.rank(x), 4, "x must be a 4D tensor")
         tf.debugging.assert_equal(tf.rank(y), 4, "y must be a 4D tensor")
         tf.debugging.assert_equal(x_shape[0], y_shape[0], "Batch size of x and y must be the same")
+
+    def get_config(self):
+        return super(PadByUp, self).get_config()
 
 
 

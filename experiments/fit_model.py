@@ -68,7 +68,7 @@ def fit_model(config):
     if not train_set:
         train_path, valid_paths, test_paths = train_valid_test(data_path,
                                                                train_ratio=0.8,
-                                                             #  test_ratio=0,
+                                                               test_ratio=0,
                                                                dataset=dataset_name,
                                                                only_test=False,
                                                                no_test=True)
@@ -108,7 +108,6 @@ def fit_model(config):
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
-
     foga_valid_sets = [LandsatDataset(valid_path, save_cache=False) for valid_path in valid_paths]
     foga_valid_loaders = [
         loader.dataloader(
@@ -123,7 +122,6 @@ def fit_model(config):
             num_classes=num_classes,
             num_channels=num_channels,
             left_mask_channels=num_classes) for valid_set in foga_valid_sets]
-
     summary_valid_set = randomly_reduce_list(summary_valid_set, summary_valid_percent)
     summary_batch_size = 12
     summary_steps = len(summary_valid_set) // summary_batch_size
@@ -139,7 +137,6 @@ def fit_model(config):
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
-
     if model_load_path:
         model = load_model(model_load_path)
 
@@ -189,12 +186,26 @@ def fit_model(config):
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         verbose=1,
-        callbacks=callback_list
-    )
-    with open(f'training_history_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}.json', 'w') as f:
-        json.dump(history.history, f)
+        callbacks=callback_list)
 
+    try:
+        history_path = os.path.join(
+            os.path.dirname(model_save_path),
+            f'training_history_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}_2.json'
+        )
+        os.makedirs(os.path.dirname(history_path), exist_ok=True)
+        with open(history_path, 'w') as f:
+            json.dump(history.history, f)
+
+        print(f'Training history saved at {history_path}')
+
+    except Exception as e:
+        print(f'Training history could not be saved: {e}')
+
+    os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     model.save(model_save_path)
+    print(f'Model saved at {model_save_path}')
+
     return model
 
 
