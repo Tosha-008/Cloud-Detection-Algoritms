@@ -9,22 +9,22 @@ from defs_for_output import *
 # Code to load model and dataset remains unchanged
 patch_size = 384
 bands = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
-batch_size = 20
+batch_size = 10
 num_classes = 3
 num_channels = len(bands)
 num_batches_to_show = 1
 
-model_path = "/Users/tosha_008/PycharmProjects/cloudFCN_master/models/model_cxn_384_30_200_2.keras"
-metrics_path = "/Users/tosha_008/PycharmProjects/cloudFCN_master/training_history/training_history_cxn_384_30_200.json"
-dataset_path = "/Volumes/Vault/Splited_biome_384"  # Biome
+model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_50_200_2.keras"
+metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/training_history_cxn_384_50_200.json"
+dataset_path = "/media/ladmin/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
 set2_398 = "/media/ladmin/Vault/Splited_set_2_398"  # Set 2 398 for test
 dataset_path_2_2 = '/media/ladmin/Vault/Splited_set_2_384'  # Set 2 for test other PC
 
-sentinel_img_dir = "/Volumes/Vault/Sentinel_2/subscenes_splited_384"
-sentinel_mask_dir = "/Volumes/Vault/Sentinel_2/masks_splited_384"
+sentinel_img_dir = "/media/ladmin/Vault/Sentinel_2/subscenes_splited_384"
+sentinel_mask_dir = "/media/ladmin/Vault/Sentinel_2/masks_splited_384"
 
-test_loader_path = '/Users/tosha_008/PycharmProjects/cloudFCN_master/output/test_paths_Set_2_35.pkl'
+test_loader_path = None
 
 dataset_1 = "Biome"
 dataset_2 = "Set_2"
@@ -35,10 +35,10 @@ model_name_2 = "cloudfcn"
 model_name_3 = "cxn"
 
 main_set = dataset_2
-main_model = model_name_3
+main_model = model_name_1
 
 if main_model=='cloudfcn' and main_set=='Set_2':
-    test_loader_path = "/home/ladmin/PycharmProjects/cloudFCN_master/output/test_paths_Set_2_35_398.pkl"
+    test_loader_path = "/home/ladmin/PycharmProjects/cloudFCN-master/output/test_paths_Set_2_35_398.pkl"
     patch_size = 398
 
 custom_objects = {
@@ -59,7 +59,7 @@ if main_set == "Biome" or main_set == "Set_2":
     test_set = load_paths(test_loader_path)
 
     if not test_set:
-        train_path, valid_paths, test_paths = train_valid_test(dataset_path_2,
+        train_path, valid_paths, test_paths = train_valid_test(set2_398,
                                                                train_ratio=0.7,
                                                                test_ratio=0.1,
                                                                dataset=main_set,
@@ -103,7 +103,7 @@ if main_set == "Sentinel_2":
 #            dataset_name=main_set,
 #            model_name=main_model,
 #            alpha_values=np.arange(0, 1, 0.05),
-#            output_file=f'/Users/tosha_008/PycharmProjects/cloudFCN_master/model_metrics/alpha_{main_model}_{main_set}_0_1_005.csv')
+#            output_file=f'../model_metrics/alpha_{main_model}_{main_set}_0_1_005.csv')
 
 # count_average_metrics(gen=test_,
 #                       model=model,
@@ -111,12 +111,12 @@ if main_set == "Sentinel_2":
 #                       dataset_name=main_set,
 #                       model_name=main_model)
 
-plot_batches(gen=test_,
-             model=model,
-             num_batches_to_show=num_batches_to_show,
-             show_masks_pred=False,
-             dataset_name=main_set,
-             model_name=main_model)
+# plot_batches(gen=test_,
+#              model=model,
+#              num_batches_to_show=num_batches_to_show,
+#              show_masks_pred=True,
+#              dataset_name=main_set,
+#              model_name=main_model)
 
 # Plot metrics only if specified
-plot_metrics(metrics_path, show_metrics=False)
+plot_metrics(metrics_path, show_metrics=True)

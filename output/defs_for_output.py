@@ -53,10 +53,10 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
         alpha = 0.5
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
     elif model_name == 'mfcnn':
-        alpha = 0.35
+        alpha = 0.6
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
     elif model_name == 'cxn':
-        alpha = 0.45
+        alpha = 0.7
         pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
     if dataset_name == 'Biome':
@@ -154,10 +154,10 @@ def count_average_metrics(gen, model, num_batches_to_show, dataset_name='Biome',
             if model_name == 'cloudfcn':
                 pred_mask_binary = (pred_mask[:, :, -2] < 0.95).astype(float)
             elif model_name == 'mfcnn':
-                alpha = 0.35
+                alpha = 0.6
                 pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
             elif model_name == 'cxn':
-                alpha = 0.45
+                alpha = 0.7
                 pred_mask_binary = (pred_mask[:, :, -1] > alpha).astype(float)
 
             if dataset_name == 'Biome':

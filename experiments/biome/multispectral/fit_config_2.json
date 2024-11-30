@@ -1,7 +1,7 @@
 {
   "io_options":{
       "model_load_path":null,
-      "model_save_path":"./models",
+      "model_save_path":"./model_jetbrains",
       "model_checkpoint_dir":"./checkpoints",
       "model_name":"mfcnn",
       "data_path":"./Splited_biome_384",
@@ -23,8 +23,8 @@
    "fit_options":{
       "patch_size":384,
       "batch_size":12,
-      "epochs":1,
-      "steps_per_epoch":5,
+      "epochs":50,
+      "steps_per_epoch":200,
       "save_each_epoch":false,
       "save_final_epoch":true
     }
