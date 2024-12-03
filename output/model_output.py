@@ -15,7 +15,7 @@ num_channels = len(bands)
 num_batches_to_show = 1
 
 model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_50_200_2.keras"
-metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/training_history_cxn_384_50_200.json"
+metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/models/training_history_mfcnn_384_50_200_2.json"
 dataset_path = "/media/ladmin/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
 set2_398 = "/media/ladmin/Vault/Splited_set_2_398"  # Set 2 398 for test
