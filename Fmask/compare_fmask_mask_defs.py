@@ -42,7 +42,7 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
     """
     # Apply threshold based on alpha and model_name
     if alpha is None:
-        alpha = 0.5 if model_name == 'cloudfcn' else 3e-5 if model_name == 'mfcnn' else 0.25
+        alpha = 0.5 if model_name == 'cloudfcn' else 3e-5 if model_name == 'mfcnn' else 0.17
     pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
 
     if model_name == 'cxn':
