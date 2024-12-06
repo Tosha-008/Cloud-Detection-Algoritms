@@ -22,6 +22,128 @@ custom_objects = {
     'OutConv': OutConv
 }
 
+def calculate_ndvi(sentinel_image):
+    """
+    Calculates NDVI as a proxy for surface temperature using Sentinel-2 data.
+
+    Parameters:
+        sentinel_image (np.array): Sentinel-2 image with 13 channels.
+
+    Returns:
+        np.array: NDVI index.
+    """
+    nir = sentinel_image[:, :, 7]  # B8
+    red = sentinel_image[:, :, 3]  # B4
+    ndvi = (nir - red) / (nir + red)
+    return ndvi
+
+
+def thermal_proxy(sentinel_image):
+    """
+    Creates a proxy for thermal data using SWIR and NDVI.
+
+    Parameters:
+        sentinel_image (np.array): Sentinel-2 image with 13 channels.
+
+    Returns:
+        np.array: Thermal proxy.
+    """
+    swir1 = sentinel_image[:, :, 11]  # B11
+    swir2 = sentinel_image[:, :, 12]  # B12
+    ndvi = calculate_ndvi(sentinel_image)
+    thermal_proxy = (swir1 + swir2) / 2 * (1 - ndvi)
+    return thermal_proxy
+
+
+from scipy.ndimage import zoom
+
+
+def resample_to_landsat_resolution(channel, sentinel_res=60, landsat_res=30):
+    """
+    Resamples a Sentinel-2 channel to Landsat 8 resolution.
+
+    Parameters:
+        channel (np.array): Single Sentinel-2 channel (60 m resolution).
+        sentinel_res (int): Resolution of Sentinel-2 channel in meters.
+        landsat_res (int): Desired resolution (Landsat 8 resolution) in meters.
+
+    Returns:
+        np.array: Resampled channel.
+    """
+    scale_factor = sentinel_res / landsat_res
+    return zoom(channel, scale_factor, order=1)  # Bilinear interpolation
+
+
+def sentinel_13_to_11(img, variant=1):
+    if img.shape[-1] != 13:
+        print(f"Skipping: expected 13 channels, found {img.shape[-1]}")
+        pass
+    height, width = img.shape[:2]
+    black_layer = np.zeros((height, width, 1), dtype=img.dtype)
+
+    avg_B5_B6_B7 = (img[:, :, 4] + img[:, :, 5] + img[:, :, 6]) / 3
+
+    thermal_ = thermal_proxy(img)
+
+    pancrom = (img[:, :, 1] + img[:, :, 2] + img[:, :, 3] + img[:, :, 7]) / 4
+    panchromatic_approx = (0.3 * img[:, :, 1] + 0.3 * img[:, :, 2] + 0.3 * img[:, :, 3] + 0.1 * img[:, :, 7])
+
+    # sentinel_b1_resampled = resample_to_landsat_resolution(img[:, :, 0])
+
+    # cirrus_resampled = resample_to_landsat_resolution(img[:, :, 10], sentinel_res=60, landsat_res=30)  # Scale from 60m to 30m
+
+
+    selected_channels_1 = [
+        img[:, :, 3],  # Band 4 (Red)
+        img[:, :, 2],  # Band 3 (Green)
+        img[:, :, 1],  # Band 2 (Blue)
+        img[:, :, 0],  # Band 1 (Coastal Aerosol)
+        img[:, :, 8],  # Band 8A (Vegetation Red Edge)
+        img[:, :, 11],  # Band 11 (SWIR 1)
+        img[:, :, 12],  # Band 12 (SWIR 2)
+        avg_B5_B6_B7,  # B5, B6, B7
+        img[:, :, 10],  # Band 10 (Cirrus)
+        img[:, :, 7],  # Band 8 (NIR)
+        img[:, :, 9]  # Band 9 (Water Vapor)
+    ]
+
+    selected_channels_2 = [
+        img[:, :, 3],  # Band 4 (Red)
+        img[:, :, 2],  # Band 3 (Green)
+        img[:, :, 1],  # Band 2 (Blue)
+        img[:, :, 0],  # Band 1 (Coastal Aerosol)
+        img[:, :, 7],  # Band 8 (NIR)
+        img[:, :, 11],  # Band 11 (SWIR 1)
+        img[:, :, 12],  # Band 12 (SWIR 2)
+        pancrom,  # B1, B2, B3, B8
+        img[:, :, 10],  # Band 10 (Cirrus)
+        thermal_,  # Band 8 (NIR)
+        thermal_  # Band 9 (Water Vapor)
+    ]
+
+    selected_channels_3 = [
+        img[:, :, 3],  # Band 4 (Red)
+        img[:, :, 2],  # Band 3 (Green)
+        img[:, :, 1],  # Band 2 (Blue)
+        img[:, :, 0],  # Band 1 (Coastal Aerosol)
+        img[:, :, 7],  # Band 8 (NIR)
+        img[:, :, 11],  # Band 11 (SWIR 1)
+        img[:, :, 12],  # Band 12 (SWIR 2)
+        panchromatic_approx,  # B1, B2, B3, B8
+        img[:, :, 10],  # Band 10 (Cirrus)
+        thermal_,  # Band 8 (NIR)
+        thermal_  # Band 9 (Water Vapor)
+    ]
+
+    if variant == 1:
+        final_image = np.stack(selected_channels_1, axis=-1)
+    elif variant == 2:
+        final_image = np.stack(selected_channels_2, axis=-1)
+    elif variant == 3:
+        final_image = np.stack(selected_channels_3, axis=-1)
+
+    img = np.concatenate((final_image, black_layer), axis=-1)  # Nodata layer
+    return img
 
 def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn', dataset_name='Set_2', min_area=5, min_pixels=17, alpha=None):
     """
@@ -42,8 +164,12 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
     """
     # Apply threshold based on alpha and model_name
     if alpha is None:
-        alpha = 0.5 if model_name == 'cloudfcn' else 3e-5 if model_name == 'mfcnn' else 0.17
-    pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
+        if dataset_name in ['Set_2', 'Biome']:
+            alpha = 0.5 if model_name == 'cloudfcn' else 3e-5 if model_name == 'mfcnn' else 0.17
+        elif dataset_name == 'Sentinel_2':
+            alpha = 0.5 if model_name == 'cloudfcn' else 0.85 if model_name == 'mfcnn' else 0.17
+
+        pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
 
     if model_name == 'cxn':
         # Postprocess predicted mask
@@ -78,7 +204,7 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
 
     # Calculate metrics for predicted mask
     metrics_pred = {"accuracy": 0, "precision": 0, "recall": 0, "f1": 0}
-    if dataset_name in ['Set_2', 'Biome']:
+    if dataset_name in ['Set_2', 'Biome', 'Sentinel_2']:
         metrics_pred["accuracy"] = accuracy_score(mask_flat, pred_mask_binary_flat)
         metrics_pred["precision"] = precision_score(mask_flat, pred_mask_binary_flat, zero_division=1)
         metrics_pred["recall"] = recall_score(mask_flat, pred_mask_binary_flat, zero_division=1)
@@ -97,16 +223,16 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
     return {"predicted": metrics_pred, "fmask": metrics_fmask}, pred_mask_binary
 
 
-
 def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_storage=None):
     """
-    Function to iterate over all images in a folder, calculate their cloudiness levels,
+    Function to iterate over images in a dataset, calculate their cloudiness levels,
     and split them into separate lists by cloudiness grade.
 
     Parameters:
-        folder (str): Path to the folder containing subfolders with images and masks.
+        folder (str or list): Path to the folder containing subfolders with images and masks,
+                              or a list of tuples (image_path, mask_path) for Sentinel dataset.
         output_file (str): Path to save the resulting cloudiness lists as a pickle file.
-        dataset_name (str): Dataset type, e.g., 'Set_2' or 'Biome'.
+        dataset_name (str): Dataset type, e.g., 'Set_2', 'Biome', or 'Sentinel'.
 
     Returns:
         dict: Dictionary containing lists of image paths categorized by cloudiness grade.
@@ -119,20 +245,26 @@ def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_s
         "no clouds": []  # 0%
     }
 
-    # Iterate through all subfolders
-    if mask_storage:
-        with open(mask_storage, "rb") as f:
-            norm_subfolders = pickle.load(f)
+    if isinstance(folder, list):  # Sentinel dataset
+        file_pairs = folder
+    else:  # Other datasets
+        if mask_storage:
+            with open(mask_storage, "rb") as f:
+                norm_subfolders = pickle.load(f)
+        else:
+            norm_subfolders = get_subfolders(folder, 'norm_subfolders')
 
-    if mask_storage == None:
-        norm_subfolders = get_subfolders(folder, 'norm_subfolders')
+        file_pairs = []
+        for path in norm_subfolders:
+            subfolder = os.path.join(folder, path)
+            image_path = os.path.join(subfolder, 'image.npy')
+            mask_path = os.path.join(subfolder, 'mask.npy')
+            if os.path.exists(image_path) and os.path.exists(mask_path):
+                file_pairs.append((image_path, mask_path))
 
-    total_subfolders = len(norm_subfolders)
-    for idx, path in enumerate(norm_subfolders):
-        # Paths to the image and mask
-        subfolder = os.path.join(folder, path)
-        mask_path = os.path.join(subfolder, 'mask.npy')
+    total_files = len(file_pairs)
 
+    for idx, (image_path, mask_path) in enumerate(file_pairs):
         if not os.path.exists(mask_path):
             continue
 
@@ -140,41 +272,38 @@ def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_s
         mask = np.load(mask_path)
 
         # Combine channels based on dataset type
-        mask_combined = np.zeros((mask.shape[0], mask.shape[1], 3))
-
-        if dataset_name == 'Set_2':
-            mask_combined[:, :, 0] = mask[:, :, 0]
-            mask_combined[:, :, 1] = mask[:, :, 1]
-            mask_combined[:, :, 2] = np.maximum(mask[:, :, 2], mask[:, :, 3])
-        elif dataset_name == 'Biome':
-            mask_combined[:, :, 0] = mask[:, :, 0]
-            mask_combined[:, :, 1] = np.maximum(mask[:, :, 1], mask[:, :, 2])
-            mask_combined[:, :, 2] = np.maximum(mask[:, :, 3], mask[:, :, 4])
+        mask = combine_channels(mask, dataset_name)
 
         # Calculate the cloudiness level
-        cloud_pixels = np.sum(mask_combined[:, :, -1] > 0)  # Assuming cloud pixels are marked with values > 0
-        total_pixels = mask_combined[:, :, -1].size
+        cloud_pixels = np.sum(mask[:, :, -1] > 0)  # Assuming cloud pixels are marked with values > 0
+        total_pixels = mask[:, :, -1].size
         cloud_coverage = (cloud_pixels / total_pixels) * 100
+
+        if dataset_name in ['Set_2', 'Biome']:
+            path_to_add = os.path.dirname(image_path)
+        else:
+            path_to_add = (image_path, mask_path)
 
         # Categorize the image by cloudiness grade
         if cloud_coverage == 0:
-            cloudiness_groups["no clouds"].append(path)
+            cloudiness_groups["no clouds"].append(path_to_add)
         elif cloud_coverage == 100:
-            cloudiness_groups["only clouds"].append(path)
+            cloudiness_groups["only clouds"].append(path_to_add)
         elif cloud_coverage < 30:
-            cloudiness_groups["low"].append(path)
+            cloudiness_groups["low"].append(path_to_add)
         elif 30 <= cloud_coverage <= 70:
-            cloudiness_groups["middle"].append(path)
+            cloudiness_groups["middle"].append(path_to_add)
         elif cloud_coverage > 70:
-            cloudiness_groups["high"].append(path)
+            cloudiness_groups["high"].append(path_to_add)
 
-        print(f"Processed {idx}/{total_subfolders} subfolders ({(idx / total_subfolders) * 100:.2f}%)")
+        print(f"Processed {idx + 1}/{total_files} files ({((idx + 1) / total_files) * 100:.2f}%)")
 
     # Save the groups to a pickle file
     with open(output_file, "wb") as f:
         pickle.dump(cloudiness_groups, f)
 
     return cloudiness_groups
+
 
 def combine_channels(mask, dataset_name):
     """Combines mask channels based on the dataset type."""
@@ -187,7 +316,12 @@ def combine_channels(mask, dataset_name):
         combined[:, :, 0] = mask[:, :, 0]
         combined[:, :, 1] = np.maximum(mask[:, :, 1], mask[:, :, 2])
         combined[:, :, 2] = np.maximum(mask[:, :, 3], mask[:, :, 4])
+    elif dataset_name == 'Sentinel_2':
+        combined[:, :, 0] = mask[:, :, 0]
+        combined[:, :, 1] = mask[:, :, 2]  # Swap channels 2 and 3
+        combined[:, :, 2] = mask[:, :, 1]
     return combined
+
 
 def load_cloudiness_group(pickle_file, group_name):
     """
@@ -227,7 +361,21 @@ def get_subfolders(folder, name):
         pickle.dump(subfolders, f)
     return subfolders
 
-def display_images_for_group(fmask_folder, norm_folder, model, model_name, dataset_name, group_name,
+
+def normalize_image(image):
+    image = image.astype(np.float32)
+    return (image - np.min(image)) / (np.max(image) - np.min(image))
+
+
+def reorder_channels(image, dataset_name):
+    if dataset_name in ['Set_2', 'Biome']:
+        return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]]
+    elif dataset_name == 'Sentinel_2':
+        return sentinel_13_to_11(image, variant=2)
+    return image
+
+
+def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None, sentinel_set=None,
                              num_images=5, pickle_file=None):
     """
     Display images and masks for a specific cloudiness group and compute accuracy metrics for predictions.
@@ -246,6 +394,12 @@ def display_images_for_group(fmask_folder, norm_folder, model, model_name, datas
     """
 
     # Get the list of folders from both directories
+
+    if dataset_name is 'Sentinel_2':
+        fmask_folder = None
+        norm_folder = None
+        if sentinel_set is None:
+            raise ValueError(f"Sentinel set must be provided.")
 
     # Load cloudiness groups from pickle file
     if pickle_file:
@@ -274,34 +428,40 @@ def display_images_for_group(fmask_folder, norm_folder, model, model_name, datas
 
     # Loop through the folders in the specified group
     for folder in group_folders:
-        folder2_path = os.path.join(norm_folder, folder)
-        folder1_name = folder[:-3] + "_" + folder[-3:]
-        folder1_path = os.path.join(fmask_folder, folder1_name)
+        if dataset_name in ['Set_2', 'Biome']:
+            folder2_path = os.path.join(norm_folder, folder)
+            folder1_name = folder[:-3] + "_" + folder[-3:]
+            folder1_path = os.path.join(fmask_folder, folder1_name)
 
-        # Paths to the images and masks
-        image_path = os.path.join(folder2_path, 'image.npy')
-        mask_path = os.path.join(folder2_path, 'mask.npy')
-        fmask_path = os.path.join(folder1_path, 'image.npy')
+            # Paths to the images and masks
+            image_path = os.path.join(folder2_path, 'image.npy')
+            mask_path = os.path.join(folder2_path, 'mask.npy')
+            fmask_path = os.path.join(folder1_path, 'image.npy')
 
-        if not (os.path.exists(image_path) and os.path.exists(mask_path) and os.path.exists(fmask_path)):
-            continue
+            if not (os.path.exists(image_path) and os.path.exists(mask_path) and os.path.exists(fmask_path)):
+                continue
+        else:
+            image_path, mask_path = folder
+            if not (os.path.exists(image_path) and os.path.exists(mask_path)):
+                continue
 
         # Load the images and masks
         image = np.load(image_path)
         mask = np.load(mask_path)
-        fmask = np.load(fmask_path)
-        binary_fmask = np.where(fmask == 2, 1, 0)
+        if dataset_name in ['Set_2', 'Biome']:
+            fmask = np.load(fmask_path)
+            binary_fmask = np.where(fmask == 2, 1, 0)
+        elif dataset_name in ['Sentinel_2']:
+            binary_fmask = None
 
         # Combine channels for the mask
         mask = combine_channels(mask, dataset_name)
 
         # Normalize the image
-        image = image.astype(np.float32)
-        image = (image - np.min(image)) / (np.max(image) - np.min(image))
+        image = normalize_image(image)
 
         # Prepare the image for prediction
-        desired_order = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
-        image_reordered = image[..., desired_order]
+        image_reordered = reorder_channels(image, dataset_name)
         image_reordered_expanded = np.expand_dims(image_reordered, axis=0)
         pred_mask = model.predict(image_reordered_expanded)
 
@@ -312,36 +472,38 @@ def display_images_for_group(fmask_folder, norm_folder, model, model_name, datas
         all_recall_pred.append(metrics["predicted"]["recall"])
         all_f1_pred.append(metrics["predicted"]["f1"])
 
-        all_accuracy_fmask.append(metrics["fmask"]["accuracy"])
-        all_precision_fmask.append(metrics["fmask"]["precision"])
-        all_recall_fmask.append(metrics["fmask"]["recall"])
-        all_f1_fmask.append(metrics["fmask"]["f1"])
+        if binary_fmask is not None:
+            all_accuracy_fmask.append(metrics["fmask"]["accuracy"])
+            all_precision_fmask.append(metrics["fmask"]["precision"])
+            all_recall_fmask.append(metrics["fmask"]["recall"])
+            all_f1_fmask.append(metrics["fmask"]["f1"])
 
         # Display the images
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))  # Create 2x2 grid
 
         image_rgb = image[:, :, :3]
         axes[0, 0].imshow(image_rgb)
-        axes[0, 0].set_title(f"Image from {folder1_name}")
+        axes[0, 0].set_title(f"Image from {os.path.dirname(image_path)}")
         axes[0, 0].axis('off')
 
         axes[0, 1].imshow(mask[:, :, -1], cmap='gray', vmin=0, vmax=1)
         axes[0, 1].set_title("Mask")
         axes[0, 1].axis('off')
 
-        axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
-        axes[1, 0].set_title("Fmask")
-        axes[1, 0].axis('off')
+        if binary_fmask is not None:
+            axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
+            axes[1, 0].set_title("Fmask")
+            axes[1, 0].axis('off')
 
-        # Add metrics below the corresponding images
-        metrics_text_fmask = (
-            f'Accuracy: {metrics["fmask"]["accuracy"]:.2f}\n'
-            f'Precision: {metrics["fmask"]["precision"]:.2f}\n'
-            f'Recall: {metrics["fmask"]["recall"]:.2f}\n'
-            f'F1 Score: {metrics["fmask"]["f1"]:.2f}'
-        )
-        axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
-                        transform=axes[1, 0].transAxes, fontsize=10)
+            # Add metrics below the corresponding images
+            metrics_text_fmask = (
+                f'Accuracy: {metrics["fmask"]["accuracy"]:.2f}\n'
+                f'Precision: {metrics["fmask"]["precision"]:.2f}\n'
+                f'Recall: {metrics["fmask"]["recall"]:.2f}\n'
+                f'F1 Score: {metrics["fmask"]["f1"]:.2f}'
+            )
+            axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
+                            transform=axes[1, 0].transAxes, fontsize=10)
 
         axes[1, 1].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
         axes[1, 1].set_title(f'Predicted Mask')
@@ -373,20 +535,22 @@ def display_images_for_group(fmask_folder, norm_folder, model, model_name, datas
     avg_recall_pred = np.mean(all_recall_pred)
     avg_f1_pred = np.mean(all_f1_pred)
 
-    avg_accuracy_fmask = np.mean(all_accuracy_fmask)
-    avg_precision_fmask = np.mean(all_precision_fmask)
-    avg_recall_fmask = np.mean(all_recall_fmask)
-    avg_f1_fmask = np.mean(all_f1_fmask)
+    if binary_fmask is not None:
+        avg_accuracy_fmask = np.mean(all_accuracy_fmask)
+        avg_precision_fmask = np.mean(all_precision_fmask)
+        avg_recall_fmask = np.mean(all_recall_fmask)
+        avg_f1_fmask = np.mean(all_f1_fmask)
 
     print(f'Average Accuracy of Model {model_name}: {avg_accuracy_pred:.2f}')
     print(f'Average Precision of Model {model_name}: {avg_precision_pred:.2f}')
     print(f'Average Recall of Model {model_name}: {avg_recall_pred:.2f}')
     print(f'Average F1 Score of Model {model_name}: {avg_f1_pred:.2f}')
 
-    print(f'Average Accuracy of Fmask: {avg_accuracy_fmask:.2f}')
-    print(f'Average Precision of Fmask: {avg_precision_fmask:.2f}')
-    print(f'Average Recall of Fmask: {avg_recall_fmask:.2f}')
-    print(f'Average F1 Score of Fmask: {avg_f1_fmask:.2f}')
+    if binary_fmask is not None:
+        print(f'Average Accuracy of Fmask: {avg_accuracy_fmask:.2f}')
+        print(f'Average Precision of Fmask: {avg_precision_fmask:.2f}')
+        print(f'Average Recall of Fmask: {avg_recall_fmask:.2f}')
+        print(f'Average F1 Score of Fmask: {avg_f1_fmask:.2f}')
 
 
 def evaluate_metrics_for_group(pickle_file, group_name, fmask_folder, norm_folder, model, model_name, dataset_name, max_objects=None):
