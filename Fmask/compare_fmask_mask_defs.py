@@ -145,6 +145,38 @@ def sentinel_13_to_11(img, variant=1):
     img = np.concatenate((final_image, black_layer), axis=-1)  # Nodata layer
     return img
 
+def load_and_preprocess(image_path, mask_path, fmask_path, dataset_name):
+    """
+    Loads and preprocesses image, mask, and Fmask data.
+
+    Parameters:
+        image_path (str): Path to the image file.
+        mask_path (str): Path to the mask file.
+        fmask_path (str or None): Path to the Fmask file.
+        dataset_name (str): Dataset type.
+
+    Returns:
+        tuple: Preprocessed (image, mask, binary_fmask).
+    """
+    # Load data
+    image = np.load(image_path)
+    mask = np.load(mask_path)
+    binary_fmask = None
+
+    if fmask_path and os.path.exists(fmask_path):
+        fmask = np.load(fmask_path)
+        binary_fmask = (fmask == 2).astype(int)
+
+    # Combine and normalize
+    mask = combine_channels(mask, dataset_name)
+    image = normalize_image(image)
+
+    # Prepare the image for prediction
+    image_reordered = reorder_channels(image, dataset_name)
+    image_reordered_expanded = np.expand_dims(image_reordered, axis=0)
+
+    return image_reordered_expanded, mask, binary_fmask
+
 def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn', dataset_name='Set_2', min_area=5, min_pixels=17, alpha=None):
     """
     Process the predicted mask and calculate metrics.
@@ -167,9 +199,9 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
         if dataset_name in ['Set_2', 'Biome']:
             alpha = 0.5 if model_name == 'cloudfcn' else 3e-5 if model_name == 'mfcnn' else 0.17
         elif dataset_name == 'Sentinel_2':
-            alpha = 0.5 if model_name == 'cloudfcn' else 0.85 if model_name == 'mfcnn' else 0.17
+            alpha = 0.5 if model_name == 'cloudfcn' else 0.61 if model_name == 'mfcnn' else 0.61
 
-        pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
+    pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
 
     if model_name == 'cxn':
         # Postprocess predicted mask
@@ -221,6 +253,152 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
         }
 
     return {"predicted": metrics_pred, "fmask": metrics_fmask}, pred_mask_binary
+
+
+def adjustment_input(pickle_file, dataset_name, group_name, sentinel_set=None, max_objects = 5):
+    if dataset_name == 'Sentinel_2':
+        if sentinel_set is None:
+            raise ValueError("Sentinel set must be provided.")
+
+    # Load cloudiness groups from pickle file
+    if not pickle_file:
+        raise ValueError("A pickle file with cloudiness groups must be provided.")
+
+    with open(pickle_file, "rb") as f:
+        cloudiness_groups = pickle.load(f)
+
+    if group_name not in cloudiness_groups:
+        raise ValueError(f"Group '{group_name}' not found in pickle file.")
+
+    group_folders = cloudiness_groups[group_name]
+    if max_objects:
+        group_folders = group_folders[:max_objects]
+
+    total_paths = len(group_folders)
+    if total_paths == 0:
+        raise ValueError(f"No paths found for group '{group_name}'.")
+    return group_folders
+
+
+def aggregate_image_metrics(group_folders, dataset_name, norm_folder, fmask_folder, model, model_name, display=False, alpha=None):
+    """
+    Calculate metrics for a group of images.
+
+    Parameters:
+        group_folders (list): List of folders or image-mask pairs.
+        dataset_name (str): Dataset type ('Set_2', 'Biome', etc.).
+        norm_folder (str): Path to the normalized folder.
+        fmask_folder (str): Path to the Fmask folder.
+        model (keras.Model): Loaded model for predictions.
+        model_name (str): Name of the model for logging purposes.
+        load_and_preprocess (function): Function to load and preprocess images and masks.
+        process_and_evaluate (function): Function to compute evaluation metrics.
+
+    Returns:
+        dict: Aggregated metrics for predictions and Fmask.
+    """
+
+    # Initialize metrics accumulators
+    all_metrics_pred = {"accuracy": [], "precision": [], "recall": [], "f1": []}
+    all_metrics_fmask = {"accuracy": [], "precision": [], "recall": [], "f1": []}
+    total_paths = len(group_folders)
+
+    # Loop through the folders in the specified group
+    for idx, folder in enumerate(group_folders, start=1):
+        if dataset_name in ['Set_2', 'Biome']:
+            folder2_path = os.path.join(norm_folder, folder)
+            folder1_name = folder[:-3] + "_" + folder[-3:]
+            folder1_path = os.path.join(fmask_folder, folder1_name)
+
+            # Paths to the images and masks
+            image_path = os.path.join(folder2_path, 'image.npy')
+            mask_path = os.path.join(folder2_path, 'mask.npy')
+            fmask_path = os.path.join(folder1_path, 'image.npy')
+
+            if not (os.path.exists(image_path) and os.path.exists(mask_path) and os.path.exists(fmask_path)):
+                continue
+        else:
+            image_path, mask_path = folder
+            fmask_path = None
+            if not (os.path.exists(image_path) and os.path.exists(mask_path)):
+                continue
+
+        # Load and preprocess data
+        image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, fmask_path, dataset_name)
+
+        # Predict mask using the model
+        pred_mask = model.predict(image)
+
+        # Process and evaluate predictions
+        metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name, alpha=alpha)
+
+        # Accumulate predicted metrics
+        all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
+        all_metrics_pred["precision"].append(metrics["predicted"]["precision"])
+        all_metrics_pred["recall"].append(metrics["predicted"]["recall"])
+        all_metrics_pred["f1"].append(metrics["predicted"]["f1"])
+
+        # Accumulate Fmask metrics if available
+        if binary_fmask is not None:
+            all_metrics_fmask["accuracy"].append(metrics["fmask"]["accuracy"])
+            all_metrics_fmask["precision"].append(metrics["fmask"]["precision"])
+            all_metrics_fmask["recall"].append(metrics["fmask"]["recall"])
+            all_metrics_fmask["f1"].append(metrics["fmask"]["f1"])
+
+        print(f"Processed {idx}/{total_paths} folders ({(idx / total_paths) * 100:.2f}%)")
+
+        if display:
+            # Display the images
+            fig, axes = plt.subplots(2, 2, figsize=(18, 12))  # Create 2x2 grid
+
+            image_rgb = image.squeeze()[:, :, :3]
+            axes[0, 0].imshow(image_rgb)
+            axes[0, 0].set_title(f"Image from {os.path.dirname(image_path)}")
+            axes[0, 0].axis('off')
+
+            axes[0, 1].imshow(mask[:, :, -1], cmap='gray', vmin=0, vmax=1)
+            axes[0, 1].set_title("Mask")
+            axes[0, 1].axis('off')
+
+            if binary_fmask is not None:
+                axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
+                axes[1, 0].set_title("Fmask")
+                axes[1, 0].axis('off')
+
+                # Add metrics below the corresponding images
+                metrics_text_fmask = (
+                    f'Accuracy: {metrics["fmask"]["accuracy"]:.2f}\n'
+                    f'Precision: {metrics["fmask"]["precision"]:.2f}\n'
+                    f'Recall: {metrics["fmask"]["recall"]:.2f}\n'
+                    f'F1 Score: {metrics["fmask"]["f1"]:.2f}'
+                )
+                axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
+                                transform=axes[1, 0].transAxes, fontsize=10)
+
+            axes[1, 1].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
+            axes[1, 1].set_title(f'Predicted Mask')
+            axes[1, 1].axis('off')
+
+            # Add metrics below the corresponding images
+            metrics_text_pred = (
+                f'Accuracy: {metrics["predicted"]["accuracy"]:.2f}\n'
+                f'Precision: {metrics["predicted"]["precision"]:.2f}\n'
+                f'Recall: {metrics["predicted"]["recall"]:.2f}\n'
+                f'F1 Score: {metrics["predicted"]["f1"]:.2f}'
+            )
+            axes[1, 1].text(0.5, -0.2, metrics_text_pred, color='black', ha='center', va='top',
+                            transform=axes[1, 1].transAxes, fontsize=10)
+
+            plt.tight_layout()
+            plt.show()
+
+    # Return aggregated metrics
+    return {
+        "predicted": {k: sum(v) / len(v) for k, v in all_metrics_pred.items() if v},
+        "fmask": {k: sum(v) / len(v) for k, v in all_metrics_fmask.items() if v} if all_metrics_fmask["accuracy"] else None
+    }
+
+
 
 
 def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_storage=None):
@@ -376,7 +554,7 @@ def reorder_channels(image, dataset_name):
 
 
 def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None, sentinel_set=None,
-                             num_images=5, pickle_file=None):
+                             max_objects=5, pickle_file=None):
     """
     Display images and masks for a specific cloudiness group and compute accuracy metrics for predictions.
 
@@ -392,168 +570,30 @@ def display_images_for_group(model, model_name, dataset_name, group_name, fmask_
         num_images (int): Number of images to display. Default is 5.
         pickle_file (str, optional): Path to the pickle file with cloudiness groups. Default is None.
     """
+    group_folders = adjustment_input(pickle_file, dataset_name, group_name, sentinel_set, max_objects)
 
-    # Get the list of folders from both directories
+    metrics = aggregate_image_metrics(
+        group_folders=group_folders,
+        dataset_name=dataset_name,
+        norm_folder=norm_folder,
+        fmask_folder=fmask_folder,
+        model=model,
+        model_name=model_name,
+        display=True
+    )
 
-    if dataset_name is 'Sentinel_2':
-        fmask_folder = None
-        norm_folder = None
-        if sentinel_set is None:
-            raise ValueError(f"Sentinel set must be provided.")
+    # Display average metrics
+    print(f"Average Metrics for {model_name}:")
+    for metric, value in metrics["predicted"].items():
+        print(f"{metric.capitalize()}: {value:.2f}")
 
-    # Load cloudiness groups from pickle file
-    if pickle_file:
-        with open(pickle_file, "rb") as f:
-            cloudiness_groups = pickle.load(f)
-
-        if group_name not in cloudiness_groups:
-            raise ValueError(f"Group '{group_name}' not found in pickle file.")
-
-        group_folders = cloudiness_groups[group_name]
-        # random.shuffle(group_folders)
-    else:
-        raise ValueError("A pickle file with cloudiness groups must be provided.")
-
-    count = 0  # Counter for the number of displayed images
-
-    all_precision_pred = []
-    all_recall_pred = []
-    all_accuracy_pred = []
-    all_f1_pred = []
-
-    all_precision_fmask = []
-    all_recall_fmask = []
-    all_accuracy_fmask = []
-    all_f1_fmask = []
-
-    # Loop through the folders in the specified group
-    for folder in group_folders:
-        if dataset_name in ['Set_2', 'Biome']:
-            folder2_path = os.path.join(norm_folder, folder)
-            folder1_name = folder[:-3] + "_" + folder[-3:]
-            folder1_path = os.path.join(fmask_folder, folder1_name)
-
-            # Paths to the images and masks
-            image_path = os.path.join(folder2_path, 'image.npy')
-            mask_path = os.path.join(folder2_path, 'mask.npy')
-            fmask_path = os.path.join(folder1_path, 'image.npy')
-
-            if not (os.path.exists(image_path) and os.path.exists(mask_path) and os.path.exists(fmask_path)):
-                continue
-        else:
-            image_path, mask_path = folder
-            if not (os.path.exists(image_path) and os.path.exists(mask_path)):
-                continue
-
-        # Load the images and masks
-        image = np.load(image_path)
-        mask = np.load(mask_path)
-        if dataset_name in ['Set_2', 'Biome']:
-            fmask = np.load(fmask_path)
-            binary_fmask = np.where(fmask == 2, 1, 0)
-        elif dataset_name in ['Sentinel_2']:
-            binary_fmask = None
-
-        # Combine channels for the mask
-        mask = combine_channels(mask, dataset_name)
-
-        # Normalize the image
-        image = normalize_image(image)
-
-        # Prepare the image for prediction
-        image_reordered = reorder_channels(image, dataset_name)
-        image_reordered_expanded = np.expand_dims(image_reordered, axis=0)
-        pred_mask = model.predict(image_reordered_expanded)
-
-        metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name)
-
-        all_accuracy_pred.append(metrics["predicted"]["accuracy"])
-        all_precision_pred.append(metrics["predicted"]["precision"])
-        all_recall_pred.append(metrics["predicted"]["recall"])
-        all_f1_pred.append(metrics["predicted"]["f1"])
-
-        if binary_fmask is not None:
-            all_accuracy_fmask.append(metrics["fmask"]["accuracy"])
-            all_precision_fmask.append(metrics["fmask"]["precision"])
-            all_recall_fmask.append(metrics["fmask"]["recall"])
-            all_f1_fmask.append(metrics["fmask"]["f1"])
-
-        # Display the images
-        fig, axes = plt.subplots(2, 2, figsize=(18, 12))  # Create 2x2 grid
-
-        image_rgb = image[:, :, :3]
-        axes[0, 0].imshow(image_rgb)
-        axes[0, 0].set_title(f"Image from {os.path.dirname(image_path)}")
-        axes[0, 0].axis('off')
-
-        axes[0, 1].imshow(mask[:, :, -1], cmap='gray', vmin=0, vmax=1)
-        axes[0, 1].set_title("Mask")
-        axes[0, 1].axis('off')
-
-        if binary_fmask is not None:
-            axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
-            axes[1, 0].set_title("Fmask")
-            axes[1, 0].axis('off')
-
-            # Add metrics below the corresponding images
-            metrics_text_fmask = (
-                f'Accuracy: {metrics["fmask"]["accuracy"]:.2f}\n'
-                f'Precision: {metrics["fmask"]["precision"]:.2f}\n'
-                f'Recall: {metrics["fmask"]["recall"]:.2f}\n'
-                f'F1 Score: {metrics["fmask"]["f1"]:.2f}'
-            )
-            axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
-                            transform=axes[1, 0].transAxes, fontsize=10)
-
-        axes[1, 1].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
-        axes[1, 1].set_title(f'Predicted Mask')
-        axes[1, 1].axis('off')
-
-        # Add metrics below the corresponding images
-        metrics_text_pred = (
-            f'Accuracy: {metrics["predicted"]["accuracy"]:.2f}\n'
-            f'Precision: {metrics["predicted"]["precision"]:.2f}\n'
-            f'Recall: {metrics["predicted"]["recall"]:.2f}\n'
-            f'F1 Score: {metrics["predicted"]["f1"]:.2f}'
-        )
-        axes[1, 1].text(0.5, -0.2, metrics_text_pred, color='black', ha='center', va='top',
-                        transform=axes[1, 1].transAxes, fontsize=10)
-
-        plt.tight_layout()
-        plt.show()
-
-        # Increment the counter
-        count += 1
-
-        # Break the loop if the required number of images has been displayed
-        if count >= num_images:
-            break
-
-    # Calculate and print the average metrics for the entire batch
-    avg_accuracy_pred = np.mean(all_accuracy_pred)
-    avg_precision_pred = np.mean(all_precision_pred)
-    avg_recall_pred = np.mean(all_recall_pred)
-    avg_f1_pred = np.mean(all_f1_pred)
-
-    if binary_fmask is not None:
-        avg_accuracy_fmask = np.mean(all_accuracy_fmask)
-        avg_precision_fmask = np.mean(all_precision_fmask)
-        avg_recall_fmask = np.mean(all_recall_fmask)
-        avg_f1_fmask = np.mean(all_f1_fmask)
-
-    print(f'Average Accuracy of Model {model_name}: {avg_accuracy_pred:.2f}')
-    print(f'Average Precision of Model {model_name}: {avg_precision_pred:.2f}')
-    print(f'Average Recall of Model {model_name}: {avg_recall_pred:.2f}')
-    print(f'Average F1 Score of Model {model_name}: {avg_f1_pred:.2f}')
-
-    if binary_fmask is not None:
-        print(f'Average Accuracy of Fmask: {avg_accuracy_fmask:.2f}')
-        print(f'Average Precision of Fmask: {avg_precision_fmask:.2f}')
-        print(f'Average Recall of Fmask: {avg_recall_fmask:.2f}')
-        print(f'Average F1 Score of Fmask: {avg_f1_fmask:.2f}')
+    if metrics["fmask"]:
+        print(f"\nAverage Metrics for Fmask:")
+        for metric, value in metrics["fmask"].items():
+            print(f"{metric.capitalize()}: {value:.2f}")
 
 
-def evaluate_metrics_for_group(pickle_file, group_name, fmask_folder, norm_folder, model, model_name, dataset_name, max_objects=None):
+def evaluate_metrics_for_group(pickle_file, group_name, model, model_name, dataset_name, fmask_folder=None, norm_folder=None, sentinel_set=None, max_objects=5):
     """
     Calculate average metrics for a specific cloudiness group.
 
@@ -569,87 +609,28 @@ def evaluate_metrics_for_group(pickle_file, group_name, fmask_folder, norm_folde
     Returns:
         dict: Dictionary with average precision, recall, accuracy, and F1 score.
     """
+    group_folders = adjustment_input(pickle_file, dataset_name, group_name, sentinel_set, max_objects)
 
-    # Load cloudiness groups from the pickle file
-    with open(pickle_file, "rb") as f:
-        cloudiness_groups = pickle.load(f)
+    metrics = aggregate_image_metrics(
+        group_folders=group_folders,
+        dataset_name=dataset_name,
+        norm_folder=norm_folder,
+        fmask_folder=fmask_folder,
+        model=model,
+        model_name=model_name,
+        display=False
+    )
 
-    if group_name not in cloudiness_groups:
-        raise ValueError(f"Group '{group_name}' not found in pickle file.")
-
-    # Get the list of paths for the specified group
-    paths = cloudiness_groups[group_name]
-    if max_objects:
-        # np.random.shuffle(paths)
-        paths = paths[:max_objects]
-
-    total_paths = len(paths)
-    if total_paths == 0:
-        raise ValueError(f"No paths found for group '{group_name}'.")
-
-    # Initialize metrics accumulators
-    all_metrics_pred = {"accuracy": [], "precision": [], "recall": [], "f1": []}
-    all_metrics_fmask = {"accuracy": [], "precision": [], "recall": [], "f1": []}
-
-    # Iterate through paths and compute metrics
-    for idx, folder in enumerate(paths, start=1):
-        # Define paths
-        folder2_path = os.path.join(norm_folder, folder)
-        folder1_name = folder[:-3] + "_" + folder[-3:]
-        folder1_path = os.path.join(fmask_folder, folder1_name)
-        image_path = os.path.join(folder2_path, 'image.npy')
-        mask_path = os.path.join(folder2_path, 'mask.npy')
-        fmask_path = os.path.join(folder1_path, 'image.npy')
-
-        # Skip if files do not exist
-        if not all(os.path.exists(p) for p in [image_path, mask_path, fmask_path]):
-            continue
-
-        # Load data
-        image = np.load(image_path)
-        mask = np.load(mask_path)
-        fmask = np.load(fmask_path)
-        binary_fmask = (fmask == 2).astype(int)
-
-        # Combine channels for the mask
-        mask = combine_channels(mask, dataset_name)
-
-        # Normalize the image
-        image = image.astype(np.float32)
-        image = (image - np.min(image)) / (np.max(image) - np.min(image))
-
-        # Prepare the image for prediction
-        desired_order = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
-        image_reordered = image[..., desired_order]
-        image_reordered_expanded = np.expand_dims(image_reordered, axis=0)
-        pred_mask = model.predict(image_reordered_expanded)
-
-        metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name)
-        all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
-        all_metrics_pred["precision"].append(metrics["predicted"]["precision"])
-        all_metrics_pred["recall"].append(metrics["predicted"]["recall"])
-        all_metrics_pred["f1"].append(metrics["predicted"]["f1"])
-
-        all_metrics_fmask["accuracy"].append(metrics["fmask"]["accuracy"])
-        all_metrics_fmask["precision"].append(metrics["fmask"]["precision"])
-        all_metrics_fmask["recall"].append(metrics["fmask"]["recall"])
-        all_metrics_fmask["f1"].append(metrics["fmask"]["f1"])
-
-
-        print(f"Processed {idx}/{total_paths} folders ({(idx / total_paths) * 100:.2f}%)")
-
-    # Compute average metrics
-    avg_metrics_pred = {k: np.mean(v) for k, v in all_metrics_pred.items()}
-    avg_metrics_fmask = {k: np.mean(v) for k, v in all_metrics_fmask.items()}
-
+    # Display results
     print(f"Metrics for group {group_name}:")
-    print("Predicted Mask Metrics:", avg_metrics_pred)
-    print("Fmask Metrics:", avg_metrics_fmask)
+    print(f"Metrics of {model_name}:", metrics["predicted"])
+    if metrics["fmask"]:
+        print("Fmask Metrics:", metrics["fmask"])
 
-    return {"predicted": avg_metrics_pred, "fmask": avg_metrics_fmask}
+    return metrics
 
 
-def evaluate_all_groups(pickle_file, fmask_folder, norm_folder, model, model_name, dataset_name, output_file, max_objects=None):
+def evaluate_all_groups(pickle_file, output_file, model, model_name, dataset_name, fmask_folder=None, norm_folder=None, sentinel_set=None, max_objects=5):
     """
     Evaluate metrics for all groups in a cloudiness pickle file and save results to a JSON file.
 
@@ -665,26 +646,25 @@ def evaluate_all_groups(pickle_file, fmask_folder, norm_folder, model, model_nam
     Returns:
         None
     """
-    # Load cloudiness groups from the pickle file
-    with open(pickle_file, "rb") as f:
-        cloudiness_groups = pickle.load(f)
 
-    if not cloudiness_groups:
-        raise ValueError("The pickle file does not contain any groups.")
+    clouds = ['low', 'middle', 'high', 'only clouds', 'no clouds']
 
     results = {}
 
-    for group_name, paths in cloudiness_groups.items():
+    for group_name in clouds:
         print(f"Evaluating group: {group_name}")
-
-        # Check if the group is empty
-        if not paths:
-            print(f"Group '{group_name}' is empty, skipping.")
-            continue
 
         # Evaluate metrics for the group
         metrics = evaluate_metrics_for_group(
-            pickle_file, group_name, fmask_folder, norm_folder, model, model_name, dataset_name, max_objects
+            pickle_file=pickle_file,
+            group_name=group_name,
+            model=model,
+            model_name=model_name,
+            fmask_folder=fmask_folder,
+            norm_folder=norm_folder,
+            sentinel_set=sentinel_set,
+            dataset_name=dataset_name,
+            max_objects=max_objects,
         )
         results[group_name] = metrics
 
@@ -698,7 +678,7 @@ def evaluate_all_groups(pickle_file, fmask_folder, norm_folder, model, model_nam
 
 
 
-def crossval_alpha_for_group(pickle_file, group_name, fmask_folder, norm_folder, model, model_name, dataset_name,
+def crossval_alpha_for_group(pickle_file, group_name, model, model_name, dataset_name, norm_folder=None, fmask_folder=None, sentinel_set=None,
                               alpha_values=None, output_file='alpha_metrics.csv', max_objects=None):
     """
     Perform cross-validation over a specific cloudiness group to find the best alpha value.
@@ -706,7 +686,6 @@ def crossval_alpha_for_group(pickle_file, group_name, fmask_folder, norm_folder,
     Parameters:
         pickle_file (str): Path to the pickle file containing cloudiness groups.
         group_name (str): Name of the cloudiness group to evaluate.
-        fmask_folder (str): Path to the Fmask folder.
         norm_folder (str): Path to the folder with images and masks.
         model (keras.Model): Loaded Keras model for prediction.
         dataset_name (str): Dataset type ('Set_2', 'Biome', etc.).
@@ -720,16 +699,14 @@ def crossval_alpha_for_group(pickle_file, group_name, fmask_folder, norm_folder,
     if alpha_values is None:
         alpha_values = [0.5, 0.7, 0.95]
 
-    # Load group paths from pickle file
-    with open(pickle_file, "rb") as f:
-        cloudiness_groups = pickle.load(f)
-
-    if group_name not in cloudiness_groups:
-        raise ValueError(f"Group '{group_name}' not found in pickle file.")
-
-    paths = cloudiness_groups[group_name]
-    if max_objects:
-        paths = paths[:max_objects]
+    # Load and validate group folders
+    group_folders = adjustment_input(
+        pickle_file=pickle_file,
+        dataset_name=dataset_name,
+        group_name=group_name,
+        sentinel_set=sentinel_set,
+        max_objects=max_objects
+    )
 
     best_alpha = None
     best_metrics = {
@@ -748,60 +725,29 @@ def crossval_alpha_for_group(pickle_file, group_name, fmask_folder, norm_folder,
     for alpha in alpha_values:
         print(f"\nEvaluating for alpha = {alpha}...")
 
-        all_accuracies = []
-        all_precisions = []
-        all_recalls = []
-        all_f1s = []
-
-        for idx, folder in enumerate(paths, start=1):
-            # Define paths
-            folder2_path = os.path.join(norm_folder, folder)
-            folder1_name = folder[:-3] + "_" + folder[-3:]
-            folder1_path = os.path.join(fmask_folder, folder1_name)
-            image_path = os.path.join(folder2_path, 'image.npy')
-            mask_path = os.path.join(folder2_path, 'mask.npy')
-            fmask_path = os.path.join(folder1_path, 'image.npy')
-
-            # Skip if files do not exist
-            if not all(os.path.exists(p) for p in [image_path, mask_path, fmask_path]):
-                continue
-
-            # Load data
-            image = np.load(image_path)
-            mask = np.load(mask_path)
-
-            # Combine channels for the mask
-            mask = combine_channels(mask, dataset_name)
-
-            # Normalize the image
-            image = image.astype(np.float32)
-            image = (image - np.min(image)) / (np.max(image) - np.min(image))
-
-            # Prepare the image for prediction
-            desired_order = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
-            image_reordered = image[..., desired_order]
-            image_reordered_expanded = np.expand_dims(image_reordered, axis=0)
-            pred_mask = model.predict(image_reordered_expanded)
-
-            metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name=model_name, dataset_name=dataset_name, alpha=alpha)
-
-            all_accuracies.append(metrics["predicted"]["accuracy"])
-            all_precisions.append(metrics["predicted"]["precision"])
-            all_recalls.append(metrics["predicted"]["recall"])
-            all_f1s.append(metrics["predicted"]["f1"])
-
-            print(f"Processed {idx + 1}/{len(paths)} images for alpha = {alpha}...")
-
-        # Compute the average metrics for the current alpha
-        avg_accuracy, avg_precision, avg_recall, avg_f1 = compute_average_metrics(
-            all_accuracies, all_precisions, all_recalls, all_f1s
+        # Aggregate metrics for the current alpha value
+        metrics = aggregate_image_metrics(
+            group_folders=group_folders,
+            dataset_name=dataset_name,
+            norm_folder=norm_folder,
+            fmask_folder=fmask_folder,
+            model=model,
+            model_name=model_name,
+            display=False,
+            alpha=alpha
         )
 
+        avg_accuracy = metrics['predicted']['accuracy']
+        avg_precision = metrics['predicted']['precision']
+        avg_recall = metrics['predicted']['recall']
+        avg_f1 = metrics['predicted']['f1']
+
+        # Display average metrics
         print(f"Metrics for alpha = {alpha}:")
-        print(f" - Accuracy: {avg_accuracy:.4f}")
-        print(f" - Precision: {avg_precision:.4f}")
-        print(f" - Recall: {avg_recall:.4f}")
-        print(f" - F1 Score: {avg_f1:.4f}")
+        print(f"Accuracy: {avg_accuracy:.2f}")
+        print(f"Precision: {avg_precision:.2f}")
+        print(f"Recall: {avg_recall:.2f}")
+        print(f"F1 Score: {avg_f1:.2f}")
 
         # Write metrics to CSV file
         with open(output_file, mode='a', newline='') as file:
@@ -819,6 +765,7 @@ def crossval_alpha_for_group(pickle_file, group_name, fmask_folder, norm_folder,
                 'f1': avg_f1
             }
 
+    # Display best metrics
     print("\nBest Alpha and Corresponding Metrics:")
     print(f"Best Alpha: {best_alpha}")
     print(f" - Accuracy: {best_metrics['accuracy']:.4f}")
