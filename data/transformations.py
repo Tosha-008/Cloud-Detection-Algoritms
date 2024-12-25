@@ -392,3 +392,37 @@ def sentinel_13_to_11():
         img = np.concatenate((final_image, black_layer), axis=-1)  # Nodata layer
         return img, mask
     return apply_transform
+
+
+def landsat_12_to_13():
+    def apply_transform(img, mask):
+        if img.shape[-1] != 12:
+            print(f"Skipping: expected 11 channels, found {img.shape[-1]}")
+            return None
+
+        red_edge_sim = (img[:, :, 3] + img[:, :, 4]) / 2  # Аппроксимация Red Edge (B5, B6, B7)
+        vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (
+                    img[:, :, 4] + img[:, :, 6] + 1e-6)  # Аппроксимация Water Vapor (B9)
+        cirrus_sim = img[:, :, 8]  # Используем Thermal Band (B9) как Cirrus
+        additional_red_edge = red_edge_sim  # Ещё один Red Edge для B8A
+
+        selected_channels_1 = [
+            img[:, :, 3],  # Band 4 (Red) -> Sentinel B4
+            img[:, :, 2],  # Band 3 (Green) -> Sentinel B3
+            img[:, :, 1],  # Band 2 (Blue) -> Sentinel B2
+            img[:, :, 0],  # Band 1 (Coastal Aerosol) -> Sentinel B1
+            red_edge_sim,  # Simulated Red Edge -> Sentinel B5
+            red_edge_sim,  # Simulated Red Edge -> Sentinel B6
+            red_edge_sim,  # Simulated Red Edge -> Sentinel B7
+            img[:, :, 4],  # Band 5 (NIR) -> Sentinel B8
+            additional_red_edge,  # Additional Red Edge -> Sentinel B8A
+            vapor_sim,  # Simulated Water Vapor -> Sentinel B9
+            cirrus_sim,  # Simulated Cirrus -> Sentinel B10
+            img[:, :, 7],  # Band 6 (SWIR 1) -> Sentinel B11
+            img[:, :, 8],  # Band 7 (SWIR 2) -> Sentinel B12
+        ]
+
+        final_image = np.stack(selected_channels_1, axis=-1)
+
+        return final_image, mask
+    return apply_transform

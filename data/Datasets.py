@@ -215,6 +215,60 @@ def train_valid_test(big_dir, train_ratio=0.7, test_ratio=0.1, dataset='Biome', 
     return train_set, validation_set, test_set
 
 
+import random
+
+
+def train_valid_test_sentinel(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, shuffle=True):
+    """
+    Splits a dataset into training, validation, and test sets based on specified ratios.
+
+    Parameters
+    ----------
+    dataset : list
+        A list of data items (e.g., tuples like (image, mask)).
+    train_ratio : float
+        The proportion of data for the training set (default is 0.7).
+    val_ratio : float
+        The proportion of data for the validation set (default is 0.15).
+    test_ratio : float
+        The proportion of data for the test set (default is 0.15).
+    shuffle : bool
+        Whether to shuffle the dataset before splitting (default is True).
+
+    Returns
+    -------
+    train_set : list
+        The training dataset.
+    val_set : list
+        The validation dataset.
+    test_set : list
+        The test dataset.
+    """
+
+    # Validate that the ratios are in the correct range
+    if not (0 <= train_ratio <= 1 and 0 <= val_ratio <= 1 and 0 <= test_ratio <= 1):
+        raise ValueError("Ratios must be in the range from 0 to 1.")
+    if abs(train_ratio + val_ratio + test_ratio - 1) > 1e-6:
+        raise ValueError("The sum of the ratios must be equal to 1.")
+
+    # Optionally shuffle the dataset to ensure randomness
+    if shuffle:
+        random.shuffle(dataset)
+
+    # Calculate the sizes of each subset
+    total_size = len(dataset)
+    train_size = int(total_size * train_ratio)
+    val_size = int(total_size * val_ratio)
+
+    # Split the dataset into train, validation, and test sets
+    train_set = dataset[:train_size]
+    val_set = dataset[train_size:train_size + val_size]
+    test_set = dataset[train_size + val_size:]
+
+    return train_set, val_set, test_set
+
+
+
 def randomly_reduce_list(paths, factor):
     """
     Randomly reduces the list of paths to a sample of the original, with count len(paths) * factor.

@@ -79,6 +79,15 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
 
     return generator
 
+def combined_generator(sentinel_gen, landsat_gen, sentinel_weight=0.3, landsat_weight=0.7):
+    sentinel_prob = sentinel_weight / (sentinel_weight + landsat_weight)
+
+    while True:
+        if np.random.rand() < sentinel_prob:
+            yield next(sentinel_gen)
+        else:
+            yield next(landsat_gen)
+
 
 def convert_paths_to_tuples(paths_list):
     return [(os.path.join(path, 'image.npy'), os.path.join(path, 'mask.npy')) for path in paths_list]

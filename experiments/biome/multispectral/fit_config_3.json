@@ -2,12 +2,12 @@
   "io_options":{
       "model_save_path":"./model_jetbrains",
       "model_name":"mfcnn",
-      "dataset_name":"Sentinel",
-
       "sentinel_img_path": "./Sentinel_data/subscenes_splited_384",
-      "sentinel_mask_path": "./Sentinel_data/masks_splited_384"
+      "sentinel_mask_path": "./Sentinel_data/masks_splited_384",
+      "test_sentinel_path": "./for_fine_tuning/test_setmfcnn_384_50_200.pkl",
+      "data_path_landsat": "./for_fine_tuning/file_with_landsat_img_to_move.pkl",
+      "model_load_path": "./for_fine_tuning/model_epoch_37_val_loss_0.34.keras"
    },
-
 
    "model_options":{
          "bands":[3,2,1,0,4,5,6,7,8,9,10,11,12],
@@ -17,7 +17,7 @@
    "fit_options":{
       "patch_size":384,
       "batch_size":4,
-      "epochs":50,
+      "epochs":15,
       "steps_per_epoch":200,
       "save_each_epoch":false,
       "save_final_epoch":true

@@ -6,7 +6,6 @@ import random
 from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
 from MFCNN.model_mfcnn_def import *
 import pickle
-from output.defs_for_output import calculate_metrics, compute_average_metrics
 import json
 import csv
 import cv2
@@ -72,6 +71,61 @@ def resample_to_landsat_resolution(channel, sentinel_res=60, landsat_res=30):
     """
     scale_factor = sentinel_res / landsat_res
     return zoom(channel, scale_factor, order=1)  # Bilinear interpolation
+
+
+def landsat_12_to_13(img, variant=1):
+    if img.shape[-1] != 12:
+        print(f"Skipping: expected 11 channels, found {img.shape[-1]}")
+        return None
+
+    red_edge_sim = (img[:, :, 3] + img[:, :, 4]) / 2  # Аппроксимация Red Edge (B5, B6, B7)
+    vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (img[:, :, 4] + img[:, :, 6] + 1e-6) # Аппроксимация Water Vapor (B9)
+    cirrus_sim = img[:, :, 8]  # Используем Thermal Band (B9) как Cirrus
+    thermal_sim = (img[:, :, 9] + img[:, :, 10]) / 2  # Среднее Thermal для B10
+    additional_red_edge = red_edge_sim  # Ещё один Red Edge для B8A
+
+    selected_channels_1 = [
+        img[:, :, 3],  # Band 4 (Red) -> Sentinel B4
+        img[:, :, 2],  # Band 3 (Green) -> Sentinel B3
+        img[:, :, 1],  # Band 2 (Blue) -> Sentinel B2
+        img[:, :, 0],  # Band 1 (Coastal Aerosol) -> Sentinel B1
+        red_edge_sim,  # Simulated Red Edge -> Sentinel B5
+        red_edge_sim,  # Simulated Red Edge -> Sentinel B6
+        red_edge_sim,  # Simulated Red Edge -> Sentinel B7
+        img[:, :, 4],  # Band 5 (NIR) -> Sentinel B8
+        additional_red_edge,  # Additional Red Edge -> Sentinel B8A
+        vapor_sim,  # Simulated Water Vapor -> Sentinel B9
+        cirrus_sim,  # Simulated Cirrus -> Sentinel B10
+        img[:, :, 7],  # Band 6 (SWIR 1) -> Sentinel B11
+        img[:, :, 8],  # Band 7 (SWIR 2) -> Sentinel B12
+    ]
+
+    selected_channels_2 = [
+        img[:, :, 3],  # Band 2 (Blue)
+        img[:, :, 2],  # Band 3 (Green)
+        img[:, :, 1],  # Band 4 (Red)
+        img[:, :, 0],  # Band 1 (Coastal Aerosol)
+        img[:, :, 4],  # Band 5 (NIR)
+        img[:, :, 6],  # Band 6 (SWIR 1)
+        img[:, :, 7],  # Band 7 (SWIR 2)
+        red_edge_sim,  # Simulierter Red Edge
+        cirrus_sim,    # Simulierter Cirrus
+        vapor_sim,     # Approximierter Wasserdampf
+        thermal_sim,   # Simulierter Thermal
+        vapor_sim,     # Zusätzlicher simulierter Wasserdampf
+        thermal_sim    # Zusätzlicher simulierter Thermal
+    ]
+    if variant == 1:
+        final_image = np.stack(selected_channels_1, axis=-1)
+    elif variant == 2:
+        final_image = np.stack(selected_channels_2, axis=-1)
+    else:
+        print(f"Invalid variant: {variant}. Returning None.")
+        return None
+
+    return final_image
+
+
 
 
 def sentinel_13_to_11(img, variant=1):
@@ -145,7 +199,7 @@ def sentinel_13_to_11(img, variant=1):
     img = np.concatenate((final_image, black_layer), axis=-1)  # Nodata layer
     return img
 
-def load_and_preprocess(image_path, mask_path, fmask_path, dataset_name):
+def load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_name):
     """
     Loads and preprocesses image, mask, and Fmask data.
 
@@ -172,8 +226,8 @@ def load_and_preprocess(image_path, mask_path, fmask_path, dataset_name):
     image = normalize_image(image)
 
     # Prepare the image for prediction
-    image_reordered = reorder_channels(image, dataset_name)
-    image_reordered_expanded = np.expand_dims(image_reordered, axis=0)
+    image = reorder_channels(image, dataset_name, model_name)
+    image_reordered_expanded = np.expand_dims(image, axis=0)
 
     return image_reordered_expanded, mask, binary_fmask
 
@@ -196,12 +250,20 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
     """
     # Apply threshold based on alpha and model_name
     if alpha is None:
-        if dataset_name in ['Set_2', 'Biome']:
-            alpha = 0.5 if model_name == 'cloudfcn' else 3e-5 if model_name == 'mfcnn' else 0.17
-        elif dataset_name == 'Sentinel_2':
-            alpha = 0.5 if model_name == 'cloudfcn' else 0.61 if model_name == 'mfcnn' else 0.61
+        if dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn', 'cxn']:
+            alpha = 3e-5 if model_name == 'mfcnn' else 0.17 if model_name == 'cxn' else 0.5
+        elif dataset_name == 'Sentinel_2' and model_name in ['mfcnn', 'cxn']:
+            alpha = 0.61 if model_name == 'mfcnn' else 0.61 if model_name == 'cxn' else 0.5
+        elif dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn_sentinel', 'cxn_sentinel']:
+            alpha = 0.82 if model_name == 'mfcnn_sentinel' else 0.5
+        elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_sentinel', 'cxn_sentinel']:
+            alpha =  0.45 if model_name == 'mfcnn_sentinel' else 0.5
 
-    pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
+
+    if model_name in ['cxn', 'mfcnn']:
+        pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
+    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel']:
+        pred_mask_binary = (pred_mask.squeeze()[:, :, -2] > alpha).astype(float)
 
     if model_name == 'cxn':
         # Postprocess predicted mask
@@ -255,32 +317,70 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
     return {"predicted": metrics_pred, "fmask": metrics_fmask}, pred_mask_binary
 
 
-def adjustment_input(pickle_file, dataset_name, group_name, sentinel_set=None, max_objects = 5):
-    if dataset_name == 'Sentinel_2':
-        if sentinel_set is None:
-            raise ValueError("Sentinel set must be provided.")
+def adjustment_input(pickle_file, group_name, max_objects=5, shuffle=False):
+    """
+    Adjusts input data from a pickle file based on the specified group name and other parameters.
 
-    # Load cloudiness groups from pickle file
+    Parameters
+    ----------
+    pickle_file : str
+        Path to the pickle file containing cloudiness groups.
+    group_name : str
+        Name of the group to retrieve or 'no filter' for all groups.
+    max_objects : int, optional
+        Maximum number of objects to include (default is 5).
+    shuffle : bool, optional
+        Whether to shuffle the resulting list (default is False).
+
+    Returns
+    -------
+    list
+        Adjusted list of paths.
+    """
     if not pickle_file:
         raise ValueError("A pickle file with cloudiness groups must be provided.")
 
+    # Load data from the pickle file
     with open(pickle_file, "rb") as f:
         cloudiness_groups = pickle.load(f)
 
-    if group_name not in cloudiness_groups:
-        raise ValueError(f"Group '{group_name}' not found in pickle file.")
+    # Handle 'no filter' case
+    if group_name == 'no filter':
+        if isinstance(cloudiness_groups, dict):
+            # Determine the minimum list length across all keys
+            min_length = min(len(lst) for lst in cloudiness_groups.values())
+            # Adjust min_length based on max_objects
+            min_length = min(min_length, max_objects // 5)
+            # Combine up to min_length items from each list
+            group_folders = [item for lst in cloudiness_groups.values() for item in lst[:min_length]]
+        elif isinstance(cloudiness_groups, list):
+            group_folders = cloudiness_groups
+        else:
+            raise ValueError("Unsupported format in pickle file for 'no filter'.")
+    else:
+        # Retrieve the specific group
+        if group_name not in cloudiness_groups:
+            raise ValueError(f"Group '{group_name}' not found in pickle file.")
+        group_folders = cloudiness_groups[group_name]
 
-    group_folders = cloudiness_groups[group_name]
-    if max_objects:
-        group_folders = group_folders[:max_objects]
+    # Shuffle if required
+    if shuffle:
+        random.shuffle(group_folders)
 
+    # Apply max_objects limit
+    group_folders = group_folders[:max_objects] if max_objects else group_folders
+
+    # Validate result
     total_paths = len(group_folders)
     if total_paths == 0:
         raise ValueError(f"No paths found for group '{group_name}'.")
+
+    print(total_paths)
     return group_folders
 
 
-def aggregate_image_metrics(group_folders, dataset_name, norm_folder, fmask_folder, model, model_name, display=False, alpha=None):
+
+def aggregate_image_metrics(group_folders, dataset_name, model, model_name, display=False, norm_folder=None, fmask_folder=None, alpha=None):
     """
     Calculate metrics for a group of images.
 
@@ -319,14 +419,20 @@ def aggregate_image_metrics(group_folders, dataset_name, norm_folder, fmask_fold
                 continue
         else:
             image_path, mask_path = folder
+            # root = '/home/ladmin/PycharmProjects/cloudFCN-master'# Can be deleted or changed
+            # image_clean_path = image_path.lstrip('./')
+            # mask_clean_path = mask_path.lstrip('./')
+            # image_path = os.path.join(root, image_clean_path)
+            # mask_path = os.path.join(root, mask_clean_path)
             fmask_path = None
             if not (os.path.exists(image_path) and os.path.exists(mask_path)):
                 continue
 
         # Load and preprocess data
-        image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, fmask_path, dataset_name)
+        image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_name)
 
         # Predict mask using the model
+        print(image.shape, mask.shape, binary_fmask.shape)
         pred_mask = model.predict(image)
 
         # Process and evaluate predictions
@@ -443,6 +549,11 @@ def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_s
     total_files = len(file_pairs)
 
     for idx, (image_path, mask_path) in enumerate(file_pairs):
+        root = '/home/ladmin/PycharmProjects/cloudFCN-master'  #Can be deleted or changed
+        image_clean_path = image_path.lstrip('./')
+        mask_clean_path = mask_path.lstrip('./')
+        image_path = os.path.join(root, image_clean_path)
+        mask_path = os.path.join(root, mask_clean_path)
         if not os.path.exists(mask_path):
             continue
 
@@ -545,16 +656,19 @@ def normalize_image(image):
     return (image - np.min(image)) / (np.max(image) - np.min(image))
 
 
-def reorder_channels(image, dataset_name):
-    if dataset_name in ['Set_2', 'Biome']:
+def reorder_channels(image, dataset_name, model_name):
+    if model_name in ['mfcnn', 'cxn'] and dataset_name in ['Set_2', 'Biome']:
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]]
-    elif dataset_name == 'Sentinel_2':
+    elif model_name in ['mfcnn', 'cxn'] and dataset_name == 'Sentinel_2':
         return sentinel_13_to_11(image, variant=2)
-    return image
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel'] and dataset_name in ['Set_2', 'Biome']:
+        return landsat_12_to_13(image, variant=1)
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel'] and dataset_name == 'Sentinel_2':
+        return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
 
 
 def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None, sentinel_set=None,
-                             max_objects=5, pickle_file=None):
+                             max_objects=5, pickle_file=None, shuffle=False):
     """
     Display images and masks for a specific cloudiness group and compute accuracy metrics for predictions.
 
@@ -570,7 +684,7 @@ def display_images_for_group(model, model_name, dataset_name, group_name, fmask_
         num_images (int): Number of images to display. Default is 5.
         pickle_file (str, optional): Path to the pickle file with cloudiness groups. Default is None.
     """
-    group_folders = adjustment_input(pickle_file, dataset_name, group_name, sentinel_set, max_objects)
+    group_folders = adjustment_input(pickle_file, group_name, max_objects, shuffle)
 
     metrics = aggregate_image_metrics(
         group_folders=group_folders,
@@ -609,7 +723,7 @@ def evaluate_metrics_for_group(pickle_file, group_name, model, model_name, datas
     Returns:
         dict: Dictionary with average precision, recall, accuracy, and F1 score.
     """
-    group_folders = adjustment_input(pickle_file, dataset_name, group_name, sentinel_set, max_objects)
+    group_folders = adjustment_input(pickle_file, group_name, max_objects)
 
     metrics = aggregate_image_metrics(
         group_folders=group_folders,
@@ -702,9 +816,7 @@ def crossval_alpha_for_group(pickle_file, group_name, model, model_name, dataset
     # Load and validate group folders
     group_folders = adjustment_input(
         pickle_file=pickle_file,
-        dataset_name=dataset_name,
         group_name=group_name,
-        sentinel_set=sentinel_set,
         max_objects=max_objects
     )
 
