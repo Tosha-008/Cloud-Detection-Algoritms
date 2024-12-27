@@ -222,11 +222,10 @@ def load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_n
         binary_fmask = (fmask == 2).astype(int)
 
     # Combine and normalize
-    mask = combine_channels(mask, dataset_name)
-    image = normalize_image(image)
-
     # Prepare the image for prediction
+    mask = combine_channels(mask, dataset_name)
     image = reorder_channels(image, dataset_name, model_name)
+    image = normalize_image_per_channel(image)
     image_reordered_expanded = np.expand_dims(image, axis=0)
 
     return image_reordered_expanded, mask, binary_fmask
@@ -251,18 +250,22 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
     # Apply threshold based on alpha and model_name
     if alpha is None:
         if dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn', 'cxn']:
-            alpha = 3e-5 if model_name == 'mfcnn' else 0.17 if model_name == 'cxn' else 0.5
+            alpha = 7.743e-12 if model_name == 'mfcnn' else 0.0004394 if model_name == 'cxn' else 0.5
         elif dataset_name == 'Sentinel_2' and model_name in ['mfcnn', 'cxn']:
-            alpha = 0.61 if model_name == 'mfcnn' else 0.61 if model_name == 'cxn' else 0.5
+            alpha = 0.12 if model_name == 'mfcnn' else 0.61 if model_name == 'cxn' else 0.5
         elif dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn_sentinel', 'cxn_sentinel']:
-            alpha = 0.82 if model_name == 'mfcnn_sentinel' else 0.5
+            alpha = 0.25 if model_name == 'mfcnn_sentinel' else 0.5
         elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_sentinel', 'cxn_sentinel']:
-            alpha =  0.45 if model_name == 'mfcnn_sentinel' else 0.5
+            alpha =  0.58 if model_name == 'mfcnn_sentinel' else 0.5
+        elif dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn_finetuned']:
+            alpha = 0.28 if model_name == 'mfcnn_finetuned' else 0.5
+        elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_finetuned']:
+            alpha =  0.26 if model_name == 'mfcnn_finetuned' else 0.5
 
 
     if model_name in ['cxn', 'mfcnn']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
-    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel']:
+    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -2] > alpha).astype(float)
 
     if model_name == 'cxn':
@@ -432,7 +435,6 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
         image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_name)
 
         # Predict mask using the model
-        print(image.shape, mask.shape, binary_fmask.shape)
         pred_mask = model.predict(image)
 
         # Process and evaluate predictions
@@ -549,11 +551,11 @@ def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_s
     total_files = len(file_pairs)
 
     for idx, (image_path, mask_path) in enumerate(file_pairs):
-        root = '/home/ladmin/PycharmProjects/cloudFCN-master'  #Can be deleted or changed
-        image_clean_path = image_path.lstrip('./')
-        mask_clean_path = mask_path.lstrip('./')
-        image_path = os.path.join(root, image_clean_path)
-        mask_path = os.path.join(root, mask_clean_path)
+        # root = '/home/ladmin/PycharmProjects/cloudFCN-master'  #Can be deleted or changed
+        # image_clean_path = image_path.lstrip('./')
+        # mask_clean_path = mask_path.lstrip('./')
+        # image_path = os.path.join(root, image_clean_path)
+        # mask_path = os.path.join(root, mask_clean_path)
         if not os.path.exists(mask_path):
             continue
 
@@ -651,9 +653,44 @@ def get_subfolders(folder, name):
     return subfolders
 
 
-def normalize_image(image):
-    image = image.astype(np.float32)
-    return (image - np.min(image)) / (np.max(image) - np.min(image))
+def normalize_image_per_channel(image, min_value=0, max_value=1):
+    """
+    Normalizes each channel of the input image independently to a specified range.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Input image array of shape (height, width, channels).
+    min_value : float, optional
+        Minimum value of the normalized range (default is 0).
+    max_value : float, optional
+        Maximum value of the normalized range (default is 1).
+
+    Returns
+    -------
+    numpy.ndarray
+        Image with each channel normalized to the specified range [min_value, max_value].
+    """
+    image = image.astype(np.float32)  # Ensure the image is in float32
+    normalized_image = np.zeros_like(image)  # Initialize the output array
+
+    # Normalize each channel independently
+    for channel in range(image.shape[-1]):
+        channel_min = np.min(image[:, :, channel])
+        channel_max = np.max(image[:, :, channel])
+        if channel_max - channel_min > 1e-6:  # Avoid division by zero
+            normalized_image[:, :, channel] = (
+                (image[:, :, channel] - channel_min) / (channel_max - channel_min)
+            )
+            # Scale to the range [min_value, max_value]
+            normalized_image[:, :, channel] = (
+                normalized_image[:, :, channel] * (max_value - min_value) + min_value
+            )
+        else:
+            # Handle case where channel_min == channel_max
+            normalized_image[:, :, channel] = min_value
+    return normalized_image
+
 
 
 def reorder_channels(image, dataset_name, model_name):
@@ -661,9 +698,9 @@ def reorder_channels(image, dataset_name, model_name):
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]]
     elif model_name in ['mfcnn', 'cxn'] and dataset_name == 'Sentinel_2':
         return sentinel_13_to_11(image, variant=2)
-    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel'] and dataset_name in ['Set_2', 'Biome']:
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned'] and dataset_name in ['Set_2', 'Biome']:
         return landsat_12_to_13(image, variant=1)
-    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel'] and dataset_name == 'Sentinel_2':
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned'] and dataset_name == 'Sentinel_2':
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
 
 

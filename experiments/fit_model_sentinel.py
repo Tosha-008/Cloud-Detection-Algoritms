@@ -38,6 +38,7 @@ def fit_model_sentinel(config):
 
     sentinel_img_dir = io_opts['sentinel_img_path']
     sentinel_mask_dir = io_opts['sentinel_mask_path']
+    test_sentinel_path = io_opts['test_sentinel_path']
 
     model_save_path = os.path.join(model_save_path,
                                    f'model_sentinel_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}.keras')
@@ -49,11 +50,35 @@ def fit_model_sentinel(config):
         num_channels = 13
 
     sentinel_set = img_mask_pair(sentinel_img_dir, sentinel_mask_dir)
-    train_set, valid_set, test = train_valid_test_sentinel(sentinel_set, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15)
+
+    with open(test_sentinel_path, "rb") as f:
+        test_sentinel = pickle.load(f)
+
+    # test_sentinel_full_paths = []
+    # for image_path, mask_path in test_sentinel:
+    #     # Remove './' and prepend the root directory
+    #     image_clean_path = image_path.lstrip('./')
+    #     mask_clean_path = mask_path.lstrip('./')
+    #     adjusted_image_path = os.path.join(project_path, image_clean_path)
+    #     adjusted_mask_path = os.path.join(project_path, mask_clean_path)
+    #     test_sentinel_full_paths.append((adjusted_image_path, adjusted_mask_path))
+
+    pickle_paths_set = set(sentinel_set)
+
+    # Filter out tuples that are in the pickle file
+    sentinel_set_no_repitition = [path for path in pickle_paths_set if path not in test_sentinel]
+
+    train_set_sentinel, valid_set_sentinel, test = train_valid_test_sentinel(sentinel_set_no_repitition,
+                                                                             train_ratio=0.8227, val_ratio=0.1773,
+                                                                             test_ratio=0.0)
+    train_set_sentinel.extend(test)
+
+    print('Number of training images:', len(train_set_sentinel))
+    print('Number of validation images:', len(valid_set_sentinel))
 
     train_loader = loader.dataloader(
-        train_set, batch_size, patch_size,
-        transformations=[trf.train_base(patch_size, fixed=True),
+        train_set_sentinel, batch_size, patch_size,
+        transformations=[trf.train_base(patch_size, fixed=False),
                          trf.band_select(bands),
                          trf.normalize_to_range()
                          ],
@@ -64,7 +89,7 @@ def fit_model_sentinel(config):
 
 
     valid_loader = loader.dataloader(
-        valid_set, batch_size, patch_size,
+        valid_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=True),
                          trf.band_select(bands),
                          trf.normalize_to_range()
@@ -73,7 +98,7 @@ def fit_model_sentinel(config):
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
-    summary_steps = len(valid_set) // batch_size
+    summary_steps = len(valid_set_sentinel) // batch_size
 
     if model_name == "mfcnn":
         model = model_mfcnn_def.build_model_mfcnn(
@@ -98,7 +123,7 @@ def fit_model_sentinel(config):
     valid_gen = valid_loader()
 
     csv_logger_save_root = os.path.join(
-        os.path.dirname(model_save_path), 'training_log.csv'
+        os.path.dirname(model_save_path), f'training_log_sentinel_{model_name}_{epochs}_{steps_per_epoch}.csv'
     )
     model_checkpoint_save_root = os.path.join(
         os.path.dirname(model_save_path), 'model_epoch_{epoch:02d}_val_loss_{val_loss:.2f}.keras'

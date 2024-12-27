@@ -5,8 +5,9 @@
       "dataset_name":"Sentinel",
 
       "sentinel_img_path": "./Sentinel_data/subscenes_splited_384",
-      "sentinel_mask_path": "./Sentinel_data/masks_splited_384"
-   },
+      "sentinel_mask_path": "./Sentinel_data/masks_splited_384",
+      "test_sentinel_path": "./for_fine_tuning/test_setmfcnn_384_50_200.pkl"
+  },
 
 
    "model_options":{

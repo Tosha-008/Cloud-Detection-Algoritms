@@ -10,13 +10,14 @@ from defs_for_output import *
 patch_size = 384
 bands_1 = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]
 bands_2 = [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-batch_size = 25
+batch_size = 10
 num_classes = 3
 num_channels = len(bands_2)
 num_batches_to_show = 1
 
-model_path = "/home/ladmin/PycharmProjects/cloudFCN-master/.cadence/cache/Dac3ba21ea1f4b098137cb6c88b856b0/15649/outputs/model_epoch_37_val_loss_0.34.keras"
-metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/.cadence/cache/Dac3ba21ea1f4b098137cb6c88b856b0/15649/outputs/training_history_sentinel_mfcnn_384_50_200.json"
+model_path_1 = "/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/model_epoch_37_val_loss_0.34.keras"
+model_path_2 = '/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_50_200_2.keras'
+metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/.cadence/cache/Dac3ba21ea1f4b098137cb6c88b856b0/16455/outputs/training_history_mfcnn_384_15_200_fine_tuning.json"
 dataset_path = "/media/ladmin/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
 set2_398 = "/media/ladmin/Vault/Splited_set_2_398"  # Set 2 398 for test
@@ -25,7 +26,7 @@ dataset_path_2_2 = '/media/ladmin/Vault/Splited_set_2_384'  # Set 2 for test oth
 sentinel_img_dir = "/home/ladmin/PycharmProjects/cloudFCN-master/Sentinel_data/subscenes_splited_384"
 sentinel_mask_dir = "/home/ladmin/PycharmProjects/cloudFCN-master/Sentinel_data/masks_splited_384"
 
-test_loader_path = None
+test_loader_path = '/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/cache_train_Biome_96.pkl'
 
 dataset_1 = "Biome"
 dataset_2 = "Set_2"
@@ -53,7 +54,7 @@ custom_objects = {
     'OutConv': OutConv
 }
 
-model = load_model(model_path, custom_objects=custom_objects)
+model = load_model(model_path_1, custom_objects=custom_objects)
 
 
 if main_set == "Biome" or main_set == "Set_2":
@@ -72,9 +73,11 @@ if main_set == "Biome" or main_set == "Set_2":
     test_ = loader.dataloader(
         test_set, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=True),
-                         trf.band_select(bands_1),
-                         #  trf.class_merge(3, 4),  # If Biome
-                         #  trf.class_merge(1, 2),  # If Biome
+                         # trf.band_select(bands_1),
+                         trf.landsat_12_to_13(),
+                         trf.class_merge(3, 4),  # If Biome
+                         trf.class_merge(1, 2),  # If Biome
+                         trf.change_mask_channels_2_3(),
                          # trf.class_merge(2, 3),  # If Set 2
                          # trf.class_merge(0, 1),  # If Set 2
                          trf.normalize_to_range()

@@ -2,6 +2,7 @@ from compare_fmask_mask_defs import *
 from tensorflow.keras.models import load_model
 from output.defs_for_output import *
 import pickle
+from data.loader import load_paths
 
 # Example usage
 
@@ -10,10 +11,10 @@ norm_folder = "/media/ladmin/Vault/Splited_set_2_384"
 
 sentinel_img_dir = "/home/ladmin/PycharmProjects/cloudFCN-master/Sentinel_data/subscenes_splited_384"
 sentinel_mask_dir = "/home/ladmin/PycharmProjects/cloudFCN-master/Sentinel_data/masks_splited_384"
-test_sentinel_path = "/home/ladmin/PycharmProjects/cloudFCN-master/.cadence/cache/Dac3ba21ea1f4b098137cb6c88b856b0/15649/outputs/test_setmfcnn_384_50_200.pkl"
+test_sentinel_path = "/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/test_setmfcnn_384_50_200.pkl"
 sentinel_set = None
 
-cloudiness_groups_path = "/home/ladmin/PycharmProjects/cloudFCN-master/Fmask/cloudiness_groups.pkl"  # Path to the pickle file
+cloudiness_groups_path_set2 = "/home/ladmin/PycharmProjects/cloudFCN-master/Fmask/cloudiness_groups_set2.pkl"  # Path to the pickle file
 cloudiness_groups_path_sentinel = '/home/ladmin/PycharmProjects/cloudFCN-master/Fmask/cloudiness_groups_sentinel.pkl'
 cloudiness_groups_path_sentinel_test_small = '/home/ladmin/PycharmProjects/cloudFCN-master/Fmask/cloudiness_groups_sentinel_test_small.pkl'
 
@@ -26,16 +27,18 @@ dataset_3 = "Sentinel_2"
 
 model_name_1 = "mfcnn"
 model_name_11 = "mfcnn_sentinel"
+model_name_111 = 'mfcnn_finetuned'
 model_name_2 = "cxn"
 model_name_3 = "cloudfcn"
 
 model_path_1 = '/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_50_200_2.keras'
 model_path_2 = '/home/ladmin/PycharmProjects/cloudFCN-master/models/model_cxn_384_50_200_2.keras'
-model_path_3 = '/home/ladmin/PycharmProjects/cloudFCN-master/.cadence/cache/Dac3ba21ea1f4b098137cb6c88b856b0/15649/outputs/model_epoch_37_val_loss_0.34.keras'
+model_path_3 = '/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/model_epoch_33_val_loss_0.53.keras'
+model_path_4 = '/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/model_epoch_33_11_finetuned_fine.keras'
 
 main_set = dataset_2
-main_model = model_name_11
-model = load_model(model_path_3, custom_objects=custom_objects)
+main_model = model_name_111
+model = load_model(model_path_4, custom_objects=custom_objects)
 
 if main_set == "Sentinel_2":
     # cloudiness_groups_path = cloudiness_groups_path_sentinel
@@ -50,13 +53,13 @@ if main_set == "Sentinel_2":
         #     print(f"{key}: {length} elements")
 
 
-# output_file_alphas = "alpha_metrics_mfcnn_sentinelmodel_landsattest_03_07_001_nofilter.csv"
-# # alpha_values = np.logspace(-12, -21, num=10, base=10)
-# alpha_values = np.arange(0.7, 0.9, 0.01)
+# output_file_alphas = "alpha_metrics_mfcnnsent_landset_finetuned_3311_04_06_low.csv"
+# # alpha_values = np.logspace(-4, -1, num=15)
+# alpha_values = np.arange(0.4, 0.6, 0.05)
 #
 # results = crossval_alpha_for_group(
 #     pickle_file=cloudiness_groups_path,
-#     group_name='no filter',
+#     group_name='low',
 #     norm_folder=norm_folder,
 #     fmask_folder=fmask_folder,
 #     sentinel_set=None,
@@ -65,10 +68,10 @@ if main_set == "Sentinel_2":
 #     dataset_name=main_set,
 #     alpha_values=alpha_values,
 #     output_file=output_file_alphas,
-#     max_objects=None
+#     max_objects=50
 # )
 
-# metrics_for_all_groups = "metrics_for_all_groups_mfcnn_sentinelmodel_landsattest_082.json"
+# metrics_for_all_groups = "metrics_for_all_groups_mfcnnsent_landset_finetuned_04.json"
 # evaluate_all_groups(
 #     pickle_file=cloudiness_groups_path,
 #     output_file=metrics_for_all_groups,
@@ -80,7 +83,7 @@ if main_set == "Sentinel_2":
 #     sentinel_set=None,
 #     max_objects=100
 # )
-
+#
 # print("Analysis complete. Results saved to", metrics_for_all_groups)
 
 
@@ -97,17 +100,18 @@ if main_set == "Sentinel_2":
 # )
 
 
-display_images_for_group(model=model,
-                         model_name=main_model,
-                         dataset_name=main_set,
-                         group_name='no filter',
-                         fmask_folder=fmask_folder,
-                         norm_folder=norm_folder,
-                         sentinel_set=None,
-                         max_objects=10,
-                         shuffle=False,
-                         pickle_file=cloudiness_groups_path) # 'low', 'middle', 'high', 'only clouds', 'no clouds', 'no filter'
+# display_images_for_group(model=model,
+#                          model_name=main_model,
+#                          dataset_name=main_set,
+#                          group_name='no clouds',
+#                          fmask_folder=fmask_folder,
+#                          norm_folder=norm_folder,
+#                          sentinel_set=None,
+#                          max_objects=10,
+#                          shuffle=False,
+#                          pickle_file=cloudiness_groups_path) # 'low', 'middle', 'high', 'only clouds', 'no clouds', 'no filter'
 
-# output_file_path = "cloudiness_groups_sentinel_test_small.pkl"
-# split_images_by_cloudiness(test_sentinel, output_file_path, dataset_name=main_set,
+# all_paths_set_landsat = load_paths('/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/cache_train_Biome_96.pkl')
+# output_file_path = "cloudiness_groups_biome.pkl"
+# split_images_by_cloudiness(all_paths_set_landsat, output_file_path, dataset_name='Biome',
 #                            mask_storage=None)

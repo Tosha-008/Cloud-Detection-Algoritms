@@ -11,7 +11,8 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, CSVLogger
 
 # Project-Specific Imports
-project_path = "/mnt/agent/system/working_dir"
+project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
+# project_path = "/mnt/agent/system/working_dir"
 sys.path.append(project_path)
 from data import loader, transformations as trf
 from data.Datasets import train_valid_test_sentinel
@@ -35,69 +36,56 @@ def fine_tuning(config):
     num_classes = config['model_options']['num_classes']
     bands = config['model_options']['bands']
 
-    sentinel_img_dir = io_opts['sentinel_img_path']
-    sentinel_mask_dir = io_opts['sentinel_mask_path']
-    test_sentinel_path = io_opts['test_sentinel_path']
+    # sentinel_img_dir = io_opts['sentinel_img_path']
+    # sentinel_mask_dir = io_opts['sentinel_mask_path']
+    sentinel_paths = io_opts['sentinel_paths']
     data_path_landsat = io_opts['data_path_landsat']
     model_load_path = io_opts['model_load_path']
 
     model_save_path = os.path.join(model_save_path,
-                                   f'model_sentinel_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}_finetuning.keras')
+                                   f'model_sentinel_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}_finetuning_lowclouds.keras')
 
     if bands is not None:
         num_channels = len(bands)
     else:
         num_channels = 13
 
-    # SENTINEL GEN
-    sentinel_set = img_mask_pair(sentinel_img_dir, sentinel_mask_dir)
+    with open(sentinel_paths, "rb") as f:
+        sentinel_set = pickle.load(f)
 
-    with open(test_sentinel_path, "rb") as f:
-        test_sentinel = pickle.load(f)
-
-    test_sentinel_full_paths = []
-    for image_path, mask_path in test_sentinel:
-        # Remove './' and prepend the root directory
-        image_clean_path = image_path.lstrip('./')
-        mask_clean_path = mask_path.lstrip('./')
-        adjusted_image_path = os.path.join(project_path, image_clean_path)
-        adjusted_mask_path = os.path.join(project_path, mask_clean_path)
-        test_sentinel_full_paths.append((adjusted_image_path, adjusted_mask_path))
-
-
-    pickle_paths_set = set(sentinel_set)
-
-    # Filter out tuples that are in the pickle file
-    sentinel_set_no_repitition = [path for path in pickle_paths_set if path not in test_sentinel_full_paths]
-
-    train_set_sentinel, valid_set_sentinel, test = train_valid_test_sentinel(sentinel_set_no_repitition,
-                                                                             train_ratio=0.8227, val_ratio=0.1773,
-                                                                             test_ratio=0.0)
-    train_set_sentinel.extend(test)
-
-    # Load data from the pickle file
     with open(data_path_landsat, "rb") as f:
-        data = pickle.load(f)
+        landsat_set = pickle.load(f)
 
-    train_set_landsat = [
+    train_set_sentinel = [
         (
-            image_path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'),
-            mask_path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data')
+            image_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data'),
+            mask_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data')
         )
-        for image_path, mask_path in data["train_set_landsat"]
+        for image_path, mask_path in sentinel_set["train_set"]
     ]
+
+    valid_set_sentinel = [
+        (
+            image_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data'),
+            mask_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data')
+        )
+        for image_path, mask_path in sentinel_set["valid_set"]
+    ]
+    train_set_landsat = [
+        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_low_clouds_finetuning'))
+        for path in landsat_set["train_set"]
+    ]
+    train_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in train_set_landsat]
 
     valid_set_landsat = [
-        (
-            image_path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'),
-            mask_path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data')
-        )
-        for image_path, mask_path in data["valid_set_landsat"]
+        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_low_clouds_finetuning'))
+        for path in landsat_set["valid_set"]
     ]
+    valid_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in valid_set_landsat]
 
     train_loader_sentinel = loader.dataloader(
         train_set_sentinel, batch_size, patch_size,
-        transformations=[trf.train_base(patch_size, fixed=True),
+        transformations=[trf.train_base(patch_size, fixed=False),
                          trf.band_select(bands),
                          trf.normalize_to_range()
                          ],
@@ -108,10 +96,11 @@ def fine_tuning(config):
 
     train_loader_landsat = loader.dataloader(
         train_set_landsat, batch_size, patch_size,
-        transformations=[trf.train_base(patch_size, fixed=True),
+        transformations=[trf.train_base(patch_size, fixed=False),
                          trf.landsat_12_to_13(),
                          trf.class_merge(3, 4),
                          trf.class_merge(1, 2),
+                         trf.change_mask_channels_2_3(),
                          trf.normalize_to_range()
                          ],
         shuffle=True,
@@ -138,9 +127,10 @@ def fine_tuning(config):
                          trf.landsat_12_to_13(),
                          trf.class_merge(3, 4),
                          trf.class_merge(1, 2),
+                         trf.change_mask_channels_2_3(),
                          trf.normalize_to_range()
                          ],
-        shuffle=True,
+        shuffle=False,
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
@@ -150,6 +140,8 @@ def fine_tuning(config):
     sentinel_steps = int(0.3 * total_valid_img) // batch_size
     summary_steps = landsat_steps + sentinel_steps
     print("Total valid images: {}".format(total_valid_img))
+    print('Landsat valid images: {}'.format(len(valid_set_landsat)))
+    print('Sentinel valid images: {}'.format(len(valid_set_sentinel)))
     print(f'Summary steps: {summary_steps}')
 
     train_gen_sentinel = train_loader_sentinel()
@@ -158,13 +150,13 @@ def fine_tuning(config):
     valid_gen_landsat = valid_loader_landsat()
 
     mixed_gen_train = loader.combined_generator(train_gen_sentinel, train_gen_landsat, sentinel_weight=0.3, landsat_weight=0.7)
-    mixed_gen_valid = loader.combined_generator(valid_gen_sentinel, valid_gen_landsat, sentinel_weight=0.3, landsat_weight=0.7)
+    mixed_gen_valid = loader.combined_generator(valid_gen_sentinel, valid_gen_landsat, sentinel_weight=0.3, landsat_weight=0.7, seed=42)
 
     csv_logger_save_root = os.path.join(
-        os.path.dirname(model_save_path), 'training_log.csv'
+        os.path.dirname(model_save_path), f'training_log_finetuning_lowclouds_{model_name}_{epochs}.csv'
     )
     model_checkpoint_save_root = os.path.join(
-        os.path.dirname(model_save_path), 'model_epoch_{epoch:02d}_val_loss_{val_loss:.2f}_fine.keras'
+        os.path.dirname(model_save_path), 'model_epoch_{epoch:02d}_val_loss_{val_loss:.2f}_fine_lowclouds.keras'
     )
 
     # Ensure directory exists
@@ -187,6 +179,9 @@ def fine_tuning(config):
     model = load_model(model_load_path)
 
     for layer in model.layers:
+            layer.trainable = True
+
+    for layer in model.layers:
         if layer.name in ['fmm', 'multiscale_layer', 'pad_by_up', 'pad_by_up_1', 'pad_by_up_2', 'dropout', 'activation', 'input_layer']:
             layer.trainable = False
         else:
@@ -196,7 +191,7 @@ def fine_tuning(config):
         print(f"Layer {i}: {layer.name}, Trainable: {layer.trainable}")
 
     model.compile(
-        optimizer=Adam(learning_rate=1e-4),
+        optimizer=Adam(learning_rate=1e-5),
         loss='categorical_crossentropy',
         metrics=['categorical_accuracy']
     )
@@ -214,7 +209,7 @@ def fine_tuning(config):
     try:
         history_path = os.path.join(
             os.path.dirname(model_save_path),
-            f'training_history_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}_fine_tuning.json'
+            f'training_history_{model_name}_{epochs}_{steps_per_epoch}_fine_tuning_lowclouds.json'
         )
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
         with open(history_path, 'w') as f:

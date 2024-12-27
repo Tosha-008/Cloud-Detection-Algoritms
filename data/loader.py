@@ -79,7 +79,12 @@ def dataloader(dataset, batch_size, patch_size, transformations=None,
 
     return generator
 
-def combined_generator(sentinel_gen, landsat_gen, sentinel_weight=0.3, landsat_weight=0.7):
+def combined_generator(sentinel_gen, landsat_gen, sentinel_weight=0.3, landsat_weight=0.7, seed=None):
+    if seed is None:
+        seed = random.randint(0, 2**32 -1)
+
+    random.seed(seed)
+    np.random.seed(seed)
     sentinel_prob = sentinel_weight / (sentinel_weight + landsat_weight)
 
     while True:

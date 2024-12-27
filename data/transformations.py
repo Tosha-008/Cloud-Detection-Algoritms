@@ -352,16 +352,20 @@ def normalize_to_range(min_value=0.0, max_value=1.0):
         Transformation for image/mask pairs.
     """
     def apply_transform(img, mask):
-        img_min = np.min(img)
-        img_max = np.max(img)
-
-        # Normalize the image to the range [0, 1]
-        img = (img - img_min) / (img_max - img_min)
-        # Scale to the range [min_value, max_value]
-        img = img * (max_value - min_value) + min_value
+        # img_min = np.min(img)
+        # img_max = np.max(img)
+        #
+        # # Normalize the image to the range [0, 1]
+        # img = (img - img_min) / (img_max - img_min)
+        # # Scale to the range [min_value, max_value]
+        # img = img * (max_value - min_value) + min_value
+        for i in range(img.shape[-1]):
+            channel_min = np.min(img[:, :, i])
+            channel_max = np.max(img[:, :, i])
+            img[:, :, i] = (img[:, :, i] - channel_min) / (channel_max - channel_min)
+            img[:, :, i] = img[:, :, i] * (max_value - min_value) + min_value
 
         return img, mask
-
     return apply_transform
 
 def sentinel_13_to_11():
@@ -401,8 +405,9 @@ def landsat_12_to_13():
             return None
 
         red_edge_sim = (img[:, :, 3] + img[:, :, 4]) / 2  # Аппроксимация Red Edge (B5, B6, B7)
-        vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (
-                    img[:, :, 4] + img[:, :, 6] + 1e-6)  # Аппроксимация Water Vapor (B9)
+        vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (img[:, :, 4] + img[:, :, 6] + 1e-6)
+        vapor_sim_norm = (vapor_sim - np.min(vapor_sim)) / (np.max(vapor_sim) - np.min(vapor_sim) + 1e-6)
+
         cirrus_sim = img[:, :, 8]  # Используем Thermal Band (B9) как Cirrus
         additional_red_edge = red_edge_sim  # Ещё один Red Edge для B8A
 
@@ -416,13 +421,25 @@ def landsat_12_to_13():
             red_edge_sim,  # Simulated Red Edge -> Sentinel B7
             img[:, :, 4],  # Band 5 (NIR) -> Sentinel B8
             additional_red_edge,  # Additional Red Edge -> Sentinel B8A
-            vapor_sim,  # Simulated Water Vapor -> Sentinel B9
+            vapor_sim_norm,  # Simulated Water Vapor -> Sentinel B9
             cirrus_sim,  # Simulated Cirrus -> Sentinel B10
             img[:, :, 7],  # Band 6 (SWIR 1) -> Sentinel B11
             img[:, :, 8],  # Band 7 (SWIR 2) -> Sentinel B12
         ]
 
         final_image = np.stack(selected_channels_1, axis=-1)
+        # for i in range(final_image.shape[-1]):  # Количество каналов
+        #     print(f"Channel {i}: {final_image[:, :, i].min()} - {final_image[:, :, i].max()}")
 
         return final_image, mask
+    return apply_transform
+
+def change_mask_channels_2_3():
+    """Combines mask channels based on the dataset type."""
+    def apply_transform(img, mask):
+        combined = np.zeros((mask.shape[0], mask.shape[1], 3))
+        combined[:, :, 0] = mask[:, :, 0]
+        combined[:, :, 1] = mask[:, :, 2]  # Swap channels 2 and 3
+        combined[:, :, 2] = mask[:, :, 1]
+        return img, combined
     return apply_transform
