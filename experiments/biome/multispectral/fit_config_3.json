@@ -4,9 +4,9 @@
       "model_name":"mfcnn",
       "sentinel_img_path": "./Sentinel_data/subscenes_splited_384",
       "sentinel_mask_path": "./Sentinel_data/masks_splited_384",
-      "sentinel_paths": "/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/sentset_for_few_clouds_finetuning.pkl",
-      "data_path_landsat": "/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/landset_for_few_clouds_finetuning.pkl",
-      "model_load_path": "/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/model_epoch_33_11_finetuned_fine.keras"
+      "sentinel_paths": "./mfcnn_common_model/sentset_for_common_model_lowclouds.pkl",
+      "data_path_landsat": "./mfcnn_common_model/landset_for_common_model_lowclouds.pkl",
+      "model_load_path": "./mfcnn_common_model/mfcnn_44_commonmodel.keras"
    },
 
    "model_options":{
@@ -17,9 +17,10 @@
    "fit_options":{
       "patch_size":384,
       "batch_size":4,
-      "epochs":1,
-      "steps_per_epoch":5,
+      "epochs":50,
+      "steps_per_epoch":200,
       "save_each_epoch":false,
-      "save_final_epoch":true
+      "save_final_epoch":true,
+      "fine_tune":true
     }
 }

@@ -8,7 +8,9 @@ from MFCNN.model_mfcnn_def import *
 import pickle
 import json
 import csv
-import cv2
+# import cv2
+from MFCNN.model_mfcnn_def import MCDropoutModel
+
 
 custom_objects = {
     'MultiscaleLayer': MultiscaleLayer,
@@ -79,7 +81,8 @@ def landsat_12_to_13(img, variant=1):
         return None
 
     red_edge_sim = (img[:, :, 3] + img[:, :, 4]) / 2  # Аппроксимация Red Edge (B5, B6, B7)
-    vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (img[:, :, 4] + img[:, :, 6] + 1e-6) # Аппроксимация Water Vapor (B9)
+    vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (img[:, :, 4] + img[:, :, 6] + 1e-6)
+    vapor_sim_norm = (vapor_sim - np.min(vapor_sim)) / (np.max(vapor_sim) - np.min(vapor_sim) + 1e-6)
     cirrus_sim = img[:, :, 8]  # Используем Thermal Band (B9) как Cirrus
     thermal_sim = (img[:, :, 9] + img[:, :, 10]) / 2  # Среднее Thermal для B10
     additional_red_edge = red_edge_sim  # Ещё один Red Edge для B8A
@@ -94,7 +97,7 @@ def landsat_12_to_13(img, variant=1):
         red_edge_sim,  # Simulated Red Edge -> Sentinel B7
         img[:, :, 4],  # Band 5 (NIR) -> Sentinel B8
         additional_red_edge,  # Additional Red Edge -> Sentinel B8A
-        vapor_sim,  # Simulated Water Vapor -> Sentinel B9
+        vapor_sim_norm,  # Simulated Water Vapor -> Sentinel B9
         cirrus_sim,  # Simulated Cirrus -> Sentinel B10
         img[:, :, 7],  # Band 6 (SWIR 1) -> Sentinel B11
         img[:, :, 8],  # Band 7 (SWIR 2) -> Sentinel B12
@@ -225,7 +228,7 @@ def load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_n
     # Prepare the image for prediction
     mask = combine_channels(mask, dataset_name)
     image = reorder_channels(image, dataset_name, model_name)
-    image = normalize_image_per_channel(image)
+    image = normalize_image(image, mode=1)
     image_reordered_expanded = np.expand_dims(image, axis=0)
 
     return image_reordered_expanded, mask, binary_fmask
@@ -257,17 +260,17 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
             alpha = 0.25 if model_name == 'mfcnn_sentinel' else 0.5
         elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_sentinel', 'cxn_sentinel']:
             alpha =  0.58 if model_name == 'mfcnn_sentinel' else 0.5
-        elif dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn_finetuned']:
-            alpha = 0.28 if model_name == 'mfcnn_finetuned' else 0.5
-        elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_finetuned']:
-            alpha =  0.26 if model_name == 'mfcnn_finetuned' else 0.5
-
+        elif dataset_name in ['Set_2', 'Biome', 'Sentinel_2'] and model_name in ['mfcnn_finetuned', 'mfcnn_finetuned_lowclouds']:
+            alpha = 0.27 if model_name == 'mfcnn_finetuned' else 0.16 if model_name == 'mfcnn_finetuned_lowclouds' else 0.5
+        elif dataset_name in ['Set_2', 'Biome'] and model_name in ['mfcnn_common']:
+            alpha = 0.33 if model_name == 'mfcnn_common' else 0.16
+        elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_common']:
+            alpha =  0.52 if model_name == 'mfcnn_common' else 0.5
 
     if model_name in ['cxn', 'mfcnn']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
-    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned']:
+    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -2] > alpha).astype(float)
-
     if model_name == 'cxn':
         # Postprocess predicted mask
         kernel = np.ones((3, 3), np.uint8)
@@ -286,6 +289,8 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
         cv2.drawContours(final_mask, contours, -1, 1, -1)
 
         pred_mask_binary = final_mask
+
+    pred_mask_binary = classify_no_clouds(pred_mask.squeeze(), pred_mask_binary, model_name, using=False)
 
     # Flatten masks
     mask_flat = mask.squeeze()[:, :, -1].flatten()
@@ -383,7 +388,8 @@ def adjustment_input(pickle_file, group_name, max_objects=5, shuffle=False):
 
 
 
-def aggregate_image_metrics(group_folders, dataset_name, model, model_name, display=False, norm_folder=None, fmask_folder=None, alpha=None):
+def aggregate_image_metrics(group_folders, dataset_name, model, model_name, display=False, display_chanel=None,
+                            norm_folder=None, fmask_folder=None, alpha=None, predict_uncertainty=False, T=15):
     """
     Calculate metrics for a group of images.
 
@@ -435,23 +441,27 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
         image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_name)
 
         # Predict mask using the model
-        pred_mask = model.predict(image)
+        if predict_uncertainty:
+            mean_pred, std_pred = predict_with_uncertainty(model, image, T=T)
+            pred_mask = (mean_pred.squeeze()[:, :, -2] > 0.45).astype(float)
+            uncertainty_mask = (std_pred.squeeze()[:, :, -2] > 0.1).astype(float)
+        else:
+            pred_mask = model.predict(image)
+            # Process and evaluate predictions
+            metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name, alpha=alpha)
 
-        # Process and evaluate predictions
-        metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name, alpha=alpha)
+            # Accumulate predicted metrics
+            all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
+            all_metrics_pred["precision"].append(metrics["predicted"]["precision"])
+            all_metrics_pred["recall"].append(metrics["predicted"]["recall"])
+            all_metrics_pred["f1"].append(metrics["predicted"]["f1"])
 
-        # Accumulate predicted metrics
-        all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
-        all_metrics_pred["precision"].append(metrics["predicted"]["precision"])
-        all_metrics_pred["recall"].append(metrics["predicted"]["recall"])
-        all_metrics_pred["f1"].append(metrics["predicted"]["f1"])
-
-        # Accumulate Fmask metrics if available
-        if binary_fmask is not None:
-            all_metrics_fmask["accuracy"].append(metrics["fmask"]["accuracy"])
-            all_metrics_fmask["precision"].append(metrics["fmask"]["precision"])
-            all_metrics_fmask["recall"].append(metrics["fmask"]["recall"])
-            all_metrics_fmask["f1"].append(metrics["fmask"]["f1"])
+            # Accumulate Fmask metrics if available
+            if binary_fmask is not None:
+                all_metrics_fmask["accuracy"].append(metrics["fmask"]["accuracy"])
+                all_metrics_fmask["precision"].append(metrics["fmask"]["precision"])
+                all_metrics_fmask["recall"].append(metrics["fmask"]["recall"])
+                all_metrics_fmask["f1"].append(metrics["fmask"]["f1"])
 
         print(f"Processed {idx}/{total_paths} folders ({(idx / total_paths) * 100:.2f}%)")
 
@@ -468,40 +478,53 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
             axes[0, 1].set_title("Mask")
             axes[0, 1].axis('off')
 
-            if binary_fmask is not None:
-                axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
-                axes[1, 0].set_title("Fmask")
+            if predict_uncertainty:
+                axes[1, 0].imshow(pred_mask, cmap='gray', vmin=0, vmax=1)
+                axes[1, 0].set_title(f"Predicted Mask")
                 axes[1, 0].axis('off')
 
+                axes[1, 1].imshow(std_pred.squeeze()[:, :, -2] * 10, cmap='gray', vmin=0, vmax=1)
+                axes[1, 1].set_title("Uncertainty Mask")
+                axes[1, 1].axis('off')
+
+            else:
+                if binary_fmask is not None:
+                    if display_chanel:
+                        axes[1, 0].imshow(pred_mask.squeeze()[:, :, -display_chanel], cmap='gray', vmin=0, vmax=1)
+                    else:
+                        axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
+                    axes[1, 0].set_title("Fmask")
+                    axes[1, 0].axis('off')
+
+                    # Add metrics below the corresponding images
+                    metrics_text_fmask = (
+                        f'Accuracy: {metrics["fmask"]["accuracy"]:.2f}\n'
+                        f'Precision: {metrics["fmask"]["precision"]:.2f}\n'
+                        f'Recall: {metrics["fmask"]["recall"]:.2f}\n'
+                        f'F1 Score: {metrics["fmask"]["f1"]:.2f}'
+                    )
+                    axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
+                                    transform=axes[1, 0].transAxes, fontsize=10)
+
+                axes[1, 1].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
+                axes[1, 1].set_title(f'Predicted Mask')
+                axes[1, 1].axis('off')
+
                 # Add metrics below the corresponding images
-                metrics_text_fmask = (
-                    f'Accuracy: {metrics["fmask"]["accuracy"]:.2f}\n'
-                    f'Precision: {metrics["fmask"]["precision"]:.2f}\n'
-                    f'Recall: {metrics["fmask"]["recall"]:.2f}\n'
-                    f'F1 Score: {metrics["fmask"]["f1"]:.2f}'
+                metrics_text_pred = (
+                    f'Accuracy: {metrics["predicted"]["accuracy"]:.2f}\n'
+                    f'Precision: {metrics["predicted"]["precision"]:.2f}\n'
+                    f'Recall: {metrics["predicted"]["recall"]:.2f}\n'
+                    f'F1 Score: {metrics["predicted"]["f1"]:.2f}'
                 )
-                axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
-                                transform=axes[1, 0].transAxes, fontsize=10)
-
-            axes[1, 1].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
-            axes[1, 1].set_title(f'Predicted Mask')
-            axes[1, 1].axis('off')
-
-            # Add metrics below the corresponding images
-            metrics_text_pred = (
-                f'Accuracy: {metrics["predicted"]["accuracy"]:.2f}\n'
-                f'Precision: {metrics["predicted"]["precision"]:.2f}\n'
-                f'Recall: {metrics["predicted"]["recall"]:.2f}\n'
-                f'F1 Score: {metrics["predicted"]["f1"]:.2f}'
-            )
-            axes[1, 1].text(0.5, -0.2, metrics_text_pred, color='black', ha='center', va='top',
-                            transform=axes[1, 1].transAxes, fontsize=10)
+                axes[1, 1].text(0.5, -0.2, metrics_text_pred, color='black', ha='center', va='top',
+                                transform=axes[1, 1].transAxes, fontsize=10)
 
             plt.tight_layout()
             plt.show()
 
     # Return aggregated metrics
-    return {
+    return None if predict_uncertainty else {
         "predicted": {k: sum(v) / len(v) for k, v in all_metrics_pred.items() if v},
         "fmask": {k: sum(v) / len(v) for k, v in all_metrics_fmask.items() if v} if all_metrics_fmask["accuracy"] else None
     }
@@ -653,9 +676,9 @@ def get_subfolders(folder, name):
     return subfolders
 
 
-def normalize_image_per_channel(image, min_value=0, max_value=1):
+def normalize_image(image, min_value=0, max_value=1, mode=1):
     """
-    Normalizes each channel of the input image independently to a specified range.
+    Normalizes the input image to a specified range based on the selected mode.
 
     Parameters
     ----------
@@ -665,31 +688,53 @@ def normalize_image_per_channel(image, min_value=0, max_value=1):
         Minimum value of the normalized range (default is 0).
     max_value : float, optional
         Maximum value of the normalized range (default is 1).
+    mode : int, optional
+        Mode of normalization:
+        - 1: Normalize each channel independently (default).
+        - 2: Normalize all channels together based on the global min and max.
 
     Returns
     -------
     numpy.ndarray
-        Image with each channel normalized to the specified range [min_value, max_value].
+        Normalized image.
     """
     image = image.astype(np.float32)  # Ensure the image is in float32
-    normalized_image = np.zeros_like(image)  # Initialize the output array
 
-    # Normalize each channel independently
-    for channel in range(image.shape[-1]):
-        channel_min = np.min(image[:, :, channel])
-        channel_max = np.max(image[:, :, channel])
-        if channel_max - channel_min > 1e-6:  # Avoid division by zero
-            normalized_image[:, :, channel] = (
-                (image[:, :, channel] - channel_min) / (channel_max - channel_min)
-            )
+    if mode == 1:
+        # Normalize each channel independently
+        normalized_image = np.zeros_like(image)  # Initialize the output array
+        for channel in range(image.shape[-1]):
+            channel_min = np.min(image[:, :, channel])
+            channel_max = np.max(image[:, :, channel])
+            if channel_max - channel_min > 1e-6:  # Avoid division by zero
+                normalized_image[:, :, channel] = (
+                    (image[:, :, channel] - channel_min) / (channel_max - channel_min)
+                )
+                # Scale to the range [min_value, max_value]
+                normalized_image[:, :, channel] = (
+                    normalized_image[:, :, channel] * (max_value - min_value) + min_value
+                )
+            else:
+                # Handle case where channel_min == channel_max
+                normalized_image[:, :, channel] = min_value
+
+    elif mode == 2:
+        # Normalize all channels together based on global min and max
+        global_min = np.min(image)
+        global_max = np.max(image)
+        if global_max - global_min > 1e-6:  # Avoid division by zero
+            normalized_image = (image - global_min) / (global_max - global_min)
             # Scale to the range [min_value, max_value]
-            normalized_image[:, :, channel] = (
-                normalized_image[:, :, channel] * (max_value - min_value) + min_value
-            )
+            normalized_image = normalized_image * (max_value - min_value) + min_value
         else:
-            # Handle case where channel_min == channel_max
-            normalized_image[:, :, channel] = min_value
+            # Handle case where global_min == global_max
+            normalized_image = np.full_like(image, min_value)
+
+    else:
+        raise ValueError("Invalid mode. Use 1 for per-channel normalization or 2 for global normalization.")
+
     return normalized_image
+
 
 
 
@@ -698,14 +743,15 @@ def reorder_channels(image, dataset_name, model_name):
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]]
     elif model_name in ['mfcnn', 'cxn'] and dataset_name == 'Sentinel_2':
         return sentinel_13_to_11(image, variant=2)
-    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned'] and dataset_name in ['Set_2', 'Biome']:
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common'] and dataset_name in ['Set_2', 'Biome']:
         return landsat_12_to_13(image, variant=1)
-    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned'] and dataset_name == 'Sentinel_2':
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common'] and dataset_name == 'Sentinel_2':
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
 
 
-def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None, sentinel_set=None,
-                             max_objects=5, pickle_file=None, shuffle=False):
+def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None,
+                             max_objects=5, pickle_file=None, shuffle=False, display_chanel=None, predict_uncertainty=False,
+                             T=15):
     """
     Display images and masks for a specific cloudiness group and compute accuracy metrics for predictions.
 
@@ -730,7 +776,10 @@ def display_images_for_group(model, model_name, dataset_name, group_name, fmask_
         fmask_folder=fmask_folder,
         model=model,
         model_name=model_name,
-        display=True
+        display=True,
+        display_chanel=display_chanel,
+        predict_uncertainty=predict_uncertainty,
+        T=T
     )
 
     # Display average metrics
@@ -926,3 +975,295 @@ def crossval_alpha_for_group(pickle_file, group_name, model, model_name, dataset
         'best_alpha': best_alpha,
         'best_metrics': best_metrics
     }
+
+
+def analyze_brightness_contrast(
+    pickle_file, model, dataset_name, model_name, norm_folder=None, max_objects=5, shuffle=False, shuffle_seed=None, selected_groups=None, output_file="results.json"
+):
+    """
+    Analysis of brightness, contrast, and additional metrics in the predicted masks of the second channel.
+
+    Parameters:
+        - pickle_file: str
+            Path to a pickle file containing cloud groups ('no clouds', 'only clouds', 'low', 'middle', 'high').
+            The pickle file should contain a dictionary where keys are group names and values are lists of
+            tuples (path to image, path to mask).
+        - model: object
+            Pre-trained model used for generating predictions.
+        - dataset_name: str
+            Name of the dataset used for preprocessing.
+        - model_name: str
+            Name of the model used for predictions.
+        - max_objects: int, optional
+            Number of images to analyze from each group. If None, all images are used.
+        - shuffle: bool, optional
+            Whether to shuffle the images before selecting samples. Default is False.
+        - shuffle_seed: int, optional
+            Seed for shuffling, ensuring reproducibility. Default is None.
+        - selected_groups: list, optional
+            List of cloud groups to analyze. If None, all groups are analyzed.
+        - output_file: str, optional
+            Path to the file where results will be saved. Default is 'results.json'.
+
+    Returns:
+        dict: Statistics of brightness, contrast, and additional metrics for each cloud group.
+    """
+    if not pickle_file:
+        raise ValueError("A pickle file with cloudiness groups must be provided.")
+
+    # Load data from the pickle file
+    try:
+        with open(pickle_file, "rb") as f:
+            cloudiness_groups = pickle.load(f)
+    except Exception as e:
+        raise ValueError(f"Error loading pickle file: {e}")
+
+    # Filter groups if selected_groups is provided
+    if selected_groups:
+        cloudiness_groups = {k: v for k, v in cloudiness_groups.items() if k in selected_groups}
+
+    if not cloudiness_groups:
+        raise ValueError("No valid cloud groups found to analyze.")
+
+    results = {}
+
+    for cloud_group, image_mask_list in cloudiness_groups.items():
+        print(f"Analyzing group: {cloud_group}...")
+
+        if shuffle:
+            if shuffle_seed is not None:
+                random.seed(shuffle_seed)
+            random.shuffle(image_mask_list)
+
+        # Select the desired number of samples
+        if max_objects is not None:
+            image_mask_list = image_mask_list[:max_objects]
+
+        print(f"Number of images to process: {len(image_mask_list)}")
+
+        brightness_values = []  # Brightness of the pixels in the second channel
+        contrast_values = []  # Difference between max and min values of the second channel
+        low_intensity_fractions = []  # Fraction of pixels below a low-intensity threshold
+        local_uniformities = []  # Local uniformity values
+        high_intensity_fractions = []  # Fraction of pixels above a high-intensity threshold
+        blur_indices = []  # Blur indices for the mask
+        entropies = []  # Entropy of probability distribution
+        mid_intensity_fractions = []  # Fraction of mid-intensity pixels
+        skewness_values = []  # Skewness of the distribution
+        kurtosis_values = []  # Kurtosis of the distribution
+        normalized_entropies = []  # Normalized entropy values
+        orderliness_coefficients = []  # Coefficients of orderliness
+
+        for idx, folder in enumerate(image_mask_list):
+            print(f"Processing image {idx + 1}/{len(image_mask_list)} in group {cloud_group}")
+            if dataset_name in ['Set_2', 'Biome']:
+                folder2_path = os.path.join(norm_folder, folder)
+
+                # Paths to the images and masks
+                image_path = os.path.join(folder2_path, 'image.npy')
+                mask_path = os.path.join(folder2_path, 'mask.npy')
+
+                if not (os.path.exists(image_path) and os.path.exists(mask_path)):
+                    continue
+            else:
+                image_path, mask_path = folder
+                fmask_path = None
+                if not (os.path.exists(image_path) and os.path.exists(mask_path)):
+                    continue
+
+            # Load the image and preprocess
+            image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, None, dataset_name, model_name)
+
+            # Get the model prediction
+            predicted_mask = model.predict(image)[0]  # Remove batch dimension
+
+            # Extract the second channel (clouds)
+            cloud_channel = predicted_mask[:, :, 1]
+
+            # Brightness statistics
+            brightness_values.extend(cloud_channel.flatten())  # Collect all pixel values
+
+            # Contrast statistics
+            max_value = np.max(cloud_channel)
+            min_value = np.min(cloud_channel)
+            contrast = max_value - min_value
+            contrast_values.append(contrast)
+
+            # Low-intensity fraction
+            low_threshold = 0.2
+            low_intensity_fraction = np.mean(cloud_channel < low_threshold)
+            low_intensity_fractions.append(low_intensity_fraction)
+
+            # Local uniformity (variance of small patches)
+            patch_size = 8
+            local_variance = []
+            for i in range(0, cloud_channel.shape[0], patch_size):
+                for j in range(0, cloud_channel.shape[1], patch_size):
+                    patch = cloud_channel[i:i + patch_size, j:j + patch_size]
+                    if patch.size > 0:
+                        local_variance.append(np.var(patch))
+            local_uniformities.append(np.mean(local_variance))
+
+            # High-intensity fraction
+            high_threshold = 0.7
+            high_intensity_fraction = np.mean(cloud_channel > high_threshold)
+            high_intensity_fractions.append(high_intensity_fraction)
+
+            # Blur index (variance of Laplacian)
+            laplacian = cv2.Laplacian(cloud_channel.astype(np.float64), cv2.CV_64F)
+            blur_index = np.var(laplacian)
+            blur_indices.append(blur_index)
+
+            # Entropy of probabilities
+            cloud_channel_flat = cloud_channel.flatten()
+            entropy = -np.sum(cloud_channel_flat * np.log(cloud_channel_flat + 1e-10)) / len(cloud_channel_flat)
+            entropies.append(entropy)
+
+            # Normalized entropy
+            max_entropy = np.log(len(cloud_channel_flat))
+            normalized_entropy = entropy / max_entropy
+            normalized_entropies.append(normalized_entropy)
+
+            # Mid-intensity fraction
+            mid_intensity_fraction = np.mean((cloud_channel >= 0.2) & (cloud_channel <= 0.8))
+            mid_intensity_fractions.append(mid_intensity_fraction)
+
+            # Skewness
+            skewness = np.mean(((cloud_channel_flat - np.mean(cloud_channel_flat)) / np.std(cloud_channel_flat))**3)
+            skewness_values.append(skewness)
+
+            # Kurtosis
+            kurtosis = np.mean(((cloud_channel_flat - np.mean(cloud_channel_flat)) / np.std(cloud_channel_flat))**4) - 3
+            kurtosis_values.append(kurtosis)
+
+            # Orderliness coefficient
+            diff_x = np.abs(np.diff(cloud_channel, axis=0))  # Разность вдоль оси X
+            diff_y = np.abs(np.diff(cloud_channel, axis=1))  # Разность вдоль оси Y
+
+            orderliness_coefficient = np.mean(diff_x[:, :-1] + diff_y[:-1, :])
+            orderliness_coefficients.append(orderliness_coefficient)
+
+        # Calculate final statistics for the current cloud group
+        results[cloud_group] = {
+            'mean_brightness': float(np.mean(brightness_values)) if brightness_values else None,
+            'std_brightness': float(np.std(brightness_values)) if brightness_values else None,
+            'mean_contrast': float(np.mean(contrast_values)) if contrast_values else None,
+            'std_contrast': float(np.std(contrast_values)) if contrast_values else None,
+            'mean_low_intensity_fraction': float(np.mean(low_intensity_fractions)) if low_intensity_fractions else None,
+            'mean_local_uniformity': float(np.mean(local_uniformities)) if local_uniformities else None,
+            'mean_high_intensity_fraction': float(np.mean(high_intensity_fractions)) if high_intensity_fractions else None,
+            'mean_blur_index': float(np.mean(blur_indices)) if blur_indices else None,
+            'mean_entropy': float(np.mean(entropies)) if entropies else None,
+            'mean_normalized_entropy': float(np.mean(normalized_entropies)) if normalized_entropies else None,
+            'mean_mid_intensity_fraction': float(np.mean(mid_intensity_fractions)) if mid_intensity_fractions else None,
+            'mean_skewness': float(np.mean(skewness_values)) if skewness_values else None,
+            'mean_kurtosis': float(np.mean(kurtosis_values)) if kurtosis_values else None,
+            'mean_orderliness_coefficient': float(np.mean(orderliness_coefficients)) if orderliness_coefficients else None,
+            'num_images': len(image_mask_list),
+        }
+
+    # Save results to the output file
+    try:
+        import json
+        with open(output_file, 'w') as f:
+            json.dump(results, f, indent=4)
+        print(f"Results saved to {output_file}")
+    except Exception as e:
+        raise ValueError(f"Error saving results to file: {e}")
+
+    return results
+
+
+
+def classify_no_clouds(predicted_mask, binary_mask, model_name, using=False):
+    """
+    Classifies a predicted mask as "no clouds" and modifies it if criteria are met.
+
+    Parameters:
+        - predicted_mask: np.ndarray
+            Predicted mask with shape (H, W, C), where the second channel represents cloud predictions.
+        - model_name: str
+            Name of the model used for predictions.
+        - using: bool
+            Whether to apply the classification logic. Default is False.
+
+    Returns:
+        - np.ndarray
+            Modified mask with zeros if classified as "no clouds", otherwise the original mask.
+    """
+    if using == False:
+        return binary_mask
+
+    if not np.all(binary_mask == 1):
+        return binary_mask
+
+    if predicted_mask.shape[-1] < 3:
+        raise ValueError("The predicted mask must have at least 3 channels.")
+
+    # Extract the second channel (clouds)
+    if model_name in ['cxn', 'mfcnn']:
+        cloud_channel = predicted_mask[:, :, -1]
+    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common']:
+        cloud_channel = predicted_mask[:, :, -2]
+
+    # Calculate metrics
+    brightness = np.mean(cloud_channel)
+    low_threshold = 0.2
+    high_threshold = 0.8
+
+    low_intensity_fraction = np.mean(cloud_channel < low_threshold)
+    high_intensity_fraction = np.mean(cloud_channel > high_threshold)
+
+    # Skewness
+    cloud_channel_flat = cloud_channel.flatten()
+    skewness = np.mean(((cloud_channel_flat - np.mean(cloud_channel_flat)) / np.std(cloud_channel_flat)) ** 3)
+
+    # Kurtosis
+    kurtosis = np.mean(((cloud_channel_flat - np.mean(cloud_channel_flat)) / np.std(cloud_channel_flat)) ** 4) - 3
+
+    # Debugging outputs
+    print("Brightness:", brightness)
+    print("Low Intensity Fraction:", low_intensity_fraction)
+    print("High Intensity Fraction:", high_intensity_fraction)
+    print("Skewness:", skewness)
+    print("Kurtosis:", kurtosis)
+
+    # Classification criteria for "no clouds" vs "only clouds"
+    if (
+            brightness < 0.63 and
+            low_intensity_fraction < 0.05 and
+            high_intensity_fraction < 0.4 and
+            skewness > -1 and
+            kurtosis < 9
+    ):
+        print('Classified as "no clouds"')
+        binary_mask[:, :] = 0  # Set all values to 0 if classified as "no clouds"
+
+    return binary_mask
+
+
+def predict_with_uncertainty(model, image, T=100):
+    """
+    Perform multiple forward passes with active MC-Dropout to estimate uncertainty.
+
+    Parameters:
+    - f_model: The model with MC-Dropout enabled.
+    - image: Input data (e.g., images or batches).
+    - T: Number of forward passes to perform.
+
+    Returns:
+    - mean_pred: Mean prediction across all passes.
+    - std_pred: Standard deviation of predictions (uncertainty).
+    """
+
+    f_model = MCDropoutModel(model)
+    preds = np.array([f_model(image, training=True).numpy() for _ in range(T)])
+    mean_pred = preds.mean(axis=0)
+    std_pred = preds.std(axis=0)
+
+    return mean_pred, std_pred
+
+
+
+
+

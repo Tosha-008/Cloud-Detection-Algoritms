@@ -14,9 +14,10 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLRO
 project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
 # project_path = "/mnt/agent/system/working_dir"
 sys.path.append(project_path)
+
 from data import loader, transformations as trf
-from data.Datasets import train_valid_test_sentinel
-from output.defs_for_output import img_mask_pair
+from MFCNN import model_mfcnn_def
+
 
 
 def fine_tuning(config):
@@ -41,9 +42,10 @@ def fine_tuning(config):
     sentinel_paths = io_opts['sentinel_paths']
     data_path_landsat = io_opts['data_path_landsat']
     model_load_path = io_opts['model_load_path']
+    fine_tune = fit_opts['fine_tune']
 
     model_save_path = os.path.join(model_save_path,
-                                   f'model_sentinel_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}_finetuning_lowclouds.keras')
+                                   f'model_{model_name}_{epochs}_{steps_per_epoch}_commonmodel_lowclouds.keras')
 
     if bands is not None:
         num_channels = len(bands)
@@ -72,13 +74,13 @@ def fine_tuning(config):
         for image_path, mask_path in sentinel_set["valid_set"]
     ]
     train_set_landsat = [
-        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_low_clouds_finetuning'))
+        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'))
         for path in landsat_set["train_set"]
     ]
     train_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in train_set_landsat]
 
     valid_set_landsat = [
-        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_low_clouds_finetuning'))
+        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'))
         for path in landsat_set["valid_set"]
     ]
     valid_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in valid_set_landsat]
@@ -87,6 +89,13 @@ def fine_tuning(config):
         train_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=False),
                          trf.band_select(bands),
+                         trf.sometimes(0.1, trf.salt_and_pepper(0.001, 0.001, pepp_value=-1, salt_value=1)),
+                         trf.sometimes(0.3, trf.intensity_scale(0.95, 1.05)),
+                         trf.sometimes(0.3, trf.intensity_shift(-0.02, 0.02)),
+                         trf.sometimes(0.2, trf.chromatic_scale(0.95, 1.05)),
+                         trf.sometimes(0.2, trf.chromatic_shift(-0.02, 0.02)),
+                         trf.sometimes(0.3, trf.white_noise(0.1)),
+                         trf.sometimes(0.1, trf.quantize(2**6)),
                          trf.normalize_to_range()
                          ],
         shuffle=True,
@@ -100,6 +109,13 @@ def fine_tuning(config):
                          trf.landsat_12_to_13(),
                          trf.class_merge(3, 4),
                          trf.class_merge(1, 2),
+                         trf.sometimes(0.1, trf.salt_and_pepper(0.001, 0.001, pepp_value=-1, salt_value=1)),
+                         trf.sometimes(0.3, trf.intensity_scale(0.95, 1.05)),
+                         trf.sometimes(0.3, trf.intensity_shift(-0.02, 0.02)),
+                         trf.sometimes(0.2, trf.chromatic_scale(0.95, 1.05)),
+                         trf.sometimes(0.2, trf.chromatic_shift(-0.02, 0.02)),
+                         trf.sometimes(0.3, trf.white_noise(0.1)),
+                         trf.sometimes(0.1, trf.quantize(2 ** 6)),
                          trf.change_mask_channels_2_3(),
                          trf.normalize_to_range()
                          ],
@@ -136,8 +152,8 @@ def fine_tuning(config):
         left_mask_channels=num_classes)
 
     total_valid_img = len(valid_set_sentinel) + len(valid_set_landsat)
-    landsat_steps = int(0.7 * total_valid_img) // batch_size
-    sentinel_steps = int(0.3 * total_valid_img) // batch_size
+    landsat_steps = int(0.5 * total_valid_img) // batch_size
+    sentinel_steps = int(0.5 * total_valid_img) // batch_size
     summary_steps = landsat_steps + sentinel_steps
     print("Total valid images: {}".format(total_valid_img))
     print('Landsat valid images: {}'.format(len(valid_set_landsat)))
@@ -149,14 +165,14 @@ def fine_tuning(config):
     train_gen_landsat = train_loader_landsat()
     valid_gen_landsat = valid_loader_landsat()
 
-    mixed_gen_train = loader.combined_generator(train_gen_sentinel, train_gen_landsat, sentinel_weight=0.3, landsat_weight=0.7)
-    mixed_gen_valid = loader.combined_generator(valid_gen_sentinel, valid_gen_landsat, sentinel_weight=0.3, landsat_weight=0.7, seed=42)
+    mixed_gen_train = loader.combined_generator(train_gen_sentinel, train_gen_landsat, sentinel_weight=0.5, landsat_weight=0.5)
+    mixed_gen_valid = loader.combined_generator(valid_gen_sentinel, valid_gen_landsat, sentinel_weight=0.5, landsat_weight=0.5, seed=42)
 
     csv_logger_save_root = os.path.join(
-        os.path.dirname(model_save_path), f'training_log_finetuning_lowclouds_{model_name}_{epochs}.csv'
+        os.path.dirname(model_save_path), f'training_log_commonmodel_lowclouds_{model_name}_{epochs}.csv'
     )
     model_checkpoint_save_root = os.path.join(
-        os.path.dirname(model_save_path), 'model_epoch_{epoch:02d}_val_loss_{val_loss:.2f}_fine_lowclouds.keras'
+        os.path.dirname(model_save_path), 'model_epoch_{epoch:02d}_val_loss_{val_loss:.2f}_commonmodel_lowclouds.keras'
     )
 
     # Ensure directory exists
@@ -176,26 +192,39 @@ def fine_tuning(config):
     # Combine callbacks
     callbacks = [model_checkpoint, csv_logger]
 
-    model = load_model(model_load_path)
+    if model_load_path:
+        model = load_model(model_load_path)
+    elif model_name == "mfcnn" and not fine_tune:
+        model = model_mfcnn_def.build_model_mfcnn(
+            num_channels=num_channels, num_classes=num_classes, dropout_p=0.5)
+        optimizer = Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
+        model.compile(
+            optimizer=optimizer,
+            loss='categorical_crossentropy',
+            metrics=['categorical_accuracy']
+        )
+        model.summary()
+    else:
+        raise ValueError('Choose correct model`s name')
 
-    for layer in model.layers:
-            layer.trainable = True
+    if fine_tune:
+        for layer in model.layers:
+                layer.trainable = True
+        for layer in model.layers:
+            if layer.name in ['fmm', 'multiscale_layer', 'pad_by_up', 'pad_by_up_1', 'pad_by_up_2', 'dropout', 'activation', 'input_layer']:
+                layer.trainable = False
+            else:
+                layer.trainable = True
+        for i, layer in enumerate(model.layers):
+            print(f"Layer {i}: {layer.name}, Trainable: {layer.trainable}")
 
-    for layer in model.layers:
-        if layer.name in ['fmm', 'multiscale_layer', 'pad_by_up', 'pad_by_up_1', 'pad_by_up_2', 'dropout', 'activation', 'input_layer']:
-            layer.trainable = False
-        else:
-            layer.trainable = True
-
-    for i, layer in enumerate(model.layers):
-        print(f"Layer {i}: {layer.name}, Trainable: {layer.trainable}")
-
-    model.compile(
-        optimizer=Adam(learning_rate=1e-5),
-        loss='categorical_crossentropy',
-        metrics=['categorical_accuracy']
-    )
-    model.summary()
+        optimizer = Adam(learning_rate=0.0001, beta_1=0.9, beta_2=0.999)
+        model.compile(
+            optimizer=optimizer,
+            loss='categorical_crossentropy',
+            metrics=['categorical_accuracy']
+        )
+        model.summary()
 
     history = model.fit(
         mixed_gen_train,
@@ -209,7 +238,7 @@ def fine_tuning(config):
     try:
         history_path = os.path.join(
             os.path.dirname(model_save_path),
-            f'training_history_{model_name}_{epochs}_{steps_per_epoch}_fine_tuning_lowclouds.json'
+            f'training_history_{model_name}_{epochs}_{steps_per_epoch}_commonmodel_lowclouds.json'
         )
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
         with open(history_path, 'w') as f:

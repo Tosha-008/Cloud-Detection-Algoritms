@@ -322,7 +322,13 @@ class PadByUp(Layer):
     def get_config(self):
         return super(PadByUp, self).get_config()
 
+class MCDropoutModel(tf.keras.Model):
+    def __init__(self, base_model):
+        super().__init__()
+        self.base_model = base_model
 
+    def call(self, inputs, training=False):
+        return self.base_model(inputs, training=True)
 
 def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2, l2_reg=0.001):
     """

@@ -4,6 +4,9 @@ import os
 import csv
 import json
 from cloudFCN.callbacks import calculate_metrics
+import matplotlib
+matplotlib.use('Qt5Agg')  # Use Tkinter-based backend for better compatibility
+
 
 
 def show_image_mask(image, mask):
@@ -79,7 +82,6 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
 
         for c in range(3):
             pred_layer = pred_mask[:, :, c]
-            # pred_mask_binary = (pred_layer < alpha).astype(float)
             axes[1, c].imshow(pred_layer, cmap='gray', vmin=0, vmax=1)
             axes[1, c].set_title(f'Predicted Class {c} Layer')
             axes[1, c].axis('off')
@@ -100,6 +102,8 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
     fig.text(0.5, 0.01,
              f"Metrics for Image {index}: Accuracy={accuracy:.4f}, Precision={precision:.4f}, Recall={recall:.4f}, F1 Score={f1:.4f}",
              ha='center', fontsize=12, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
+
+    plt.tight_layout()
     plt.show()
 
     # Print metrics
@@ -108,6 +112,7 @@ def show_image_mask_and_prediction(image, mask, pred_mask, index, show_masks_pre
     print(f" - Precision: {precision:.4f}")
     print(f" - Recall: {recall:.4f}")
     print(f" - F1 Score: {f1:.4f}\n")
+
 
 
 def plot_metrics(path, show_metrics=False):
@@ -291,3 +296,4 @@ def find_alpha(gen, model, num_batches_to_show, dataset_name='Biome', model_name
     print(f" - Precision: {best_metrics['precision']:.4f}")
     print(f" - Recall: {best_metrics['recall']:.4f}")
     print(f" - F1 Score: {best_metrics['f1']:.4f}")
+
