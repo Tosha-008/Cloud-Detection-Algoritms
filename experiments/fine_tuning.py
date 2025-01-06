@@ -11,8 +11,8 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, CSVLogger
 
 # Project-Specific Imports
-project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
-# project_path = "/mnt/agent/system/working_dir"
+# project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
+project_path = "/mnt/agent/system/working_dir"
 sys.path.append(project_path)
 
 from data import loader, transformations as trf
@@ -60,27 +60,27 @@ def fine_tuning(config):
 
     train_set_sentinel = [
         (
-            image_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data'),
-            mask_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data')
+            image_path.replace('/media/ladmin/Vault/Sentinel_2', './Data_Common'),
+            mask_path.replace('/media/ladmin/Vault/Sentinel_2', './Data_Common')
         )
         for image_path, mask_path in sentinel_set["train_set"]
     ]
 
     valid_set_sentinel = [
         (
-            image_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data'),
-            mask_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data')
+            image_path.replace('/media/ladmin/Vault/Sentinel_2', './Data_Common'),
+            mask_path.replace('/media/ladmin/Vault/Sentinel_2', './Data_Common')
         )
         for image_path, mask_path in sentinel_set["valid_set"]
     ]
     train_set_landsat = [
-        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'))
+        (path.replace('/media/ladmin/Vault/Splited_biome_384', './Data_Common'))
         for path in landsat_set["train_set"]
     ]
     train_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in train_set_landsat]
 
     valid_set_landsat = [
-        (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'))
+        (path.replace('/media/ladmin/Vault/Splited_biome_384', './Data_Common'))
         for path in landsat_set["valid_set"]
     ]
     valid_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in valid_set_landsat]

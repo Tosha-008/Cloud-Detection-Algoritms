@@ -17,8 +17,8 @@
    "fit_options":{
       "patch_size":384,
       "batch_size":4,
-      "epochs":50,
-      "steps_per_epoch":200,
+      "epochs":1,
+      "steps_per_epoch":50,
       "save_each_epoch":false,
       "save_final_epoch":true,
       "fine_tune":true

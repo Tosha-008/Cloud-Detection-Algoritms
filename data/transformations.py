@@ -337,7 +337,7 @@ def quantize(number_steps, min_value=0, max_value=255, clip=False):
 
 def normalize_to_range(min_value=0.0, max_value=1.0):
     """
-    Normalizes the image to the specified range.
+    Normalizes the image to the specified range for each channel independently.
 
     Parameters
     ----------
@@ -351,22 +351,40 @@ def normalize_to_range(min_value=0.0, max_value=1.0):
     apply_transform : func
         Transformation for image/mask pairs.
     """
-    def apply_transform(img, mask):
-        # img_min = np.min(img)
-        # img_max = np.max(img)
-        #
-        # # Normalize the image to the range [0, 1]
-        # img = (img - img_min) / (img_max - img_min)
-        # # Scale to the range [min_value, max_value]
-        # img = img * (max_value - min_value) + min_value
-        for i in range(img.shape[-1]):
-            channel_min = np.min(img[:, :, i])
-            channel_max = np.max(img[:, :, i])
-            img[:, :, i] = (img[:, :, i] - channel_min) / (channel_max - channel_min)
-            img[:, :, i] = img[:, :, i] * (max_value - min_value) + min_value
 
-        return img, mask
+    def apply_transform(img, mask):
+        """
+        Applies normalization to the image.
+
+        Parameters
+        ----------
+        img : numpy.ndarray
+            Input image array with shape (H, W, C), where C is the number of channels.
+        mask : numpy.ndarray
+            Corresponding mask array, which remains unchanged.
+
+        Returns
+        -------
+        normalized_image : numpy.ndarray
+            Image normalized to the specified range.
+        mask : numpy.ndarray
+            Unchanged mask.
+        """
+        img = img.astype(np.float32)  # Ensure compatibility with floating-point operations
+        channel_min = np.min(img, axis=(0, 1), keepdims=True)  # Per-channel minimum
+        channel_max = np.max(img, axis=(0, 1), keepdims=True)  # Per-channel maximum
+
+        # Prevent division by zero
+        denominator = np.maximum(channel_max - channel_min, 1e-6)
+        normalized_image = (img - channel_min) / denominator
+
+        # Scale to [min_value, max_value]
+        normalized_image = normalized_image * (max_value - min_value) + min_value
+
+        return normalized_image, mask
+
     return apply_transform
+
 
 def sentinel_13_to_11():
     def apply_transform(img, mask):

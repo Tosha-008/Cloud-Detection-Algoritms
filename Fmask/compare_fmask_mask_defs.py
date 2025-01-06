@@ -8,7 +8,7 @@ from MFCNN.model_mfcnn_def import *
 import pickle
 import json
 import csv
-# import cv2
+import cv2
 from MFCNN.model_mfcnn_def import MCDropoutModel
 
 
