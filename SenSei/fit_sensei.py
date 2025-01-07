@@ -9,7 +9,8 @@ from tensorflow.python.framework.ops import disable_eager_execution
 
 import yaml
 
-project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
+# project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
+project_path = "/mnt/agent/system/working_dir"
 sys.path.append(project_path)
 
 from SenSei.sensei_loader import SEnSeITrainer
@@ -51,7 +52,15 @@ if __name__=='__main__':
 
     callbacks=(
             TensorBoard(log_dir=os.path.join(OUT_DIR,'logs'),update_freq='epoch',profile_batch=0),
-            tf.keras.callbacks.ModelCheckpoint(os.path.join(OUT_DIR,'{epoch:03d}-{val_loss:.3f}.hdf5'),mode='min',monitor='val_loss',verbose=2,save_best_only=True,save_weights_only=False),
+            tf.keras.callbacks.ModelCheckpoint(
+                filepath=os.path.join(OUT_DIR, '{epoch:03d}-{val_loss:.3f}.h5'),
+                mode='min',
+                monitor='val_loss',
+                verbose=2,
+                save_best_only=True,
+                save_weights_only=False
+            ),
+
             tf.keras.callbacks.ReduceLROnPlateau(
                     monitor='val_loss',
                     factor=0.25,
@@ -63,8 +72,8 @@ if __name__=='__main__':
     loader = SEnSeITrainer(config['descriptor_size'],1024,num_channels=(3,14))
     tester = SEnSeITrainer(config['descriptor_size'],4096,num_channels=13,test_mode=True)
 
-    # model.get_layer('SEnSeI').summary(line_length=140)
-    # model.summary(line_length=140)
+    model.get_layer('SEnSeI').summary(line_length=140)
+    model.summary(line_length=140)
 
     model.compile(optimizer = SGD(learning_rate=0.01,momentum=0.75),loss={'candidates':'mean_squared_error','band_values':'mean_squared_error'},loss_weights={'candidates':0.5,'band_values':1},metrics={'candidates':'binary_accuracy'})
     model.fit(loader,validation_data = tester, validation_steps=200,steps_per_epoch=1000, epochs=200, callbacks=callbacks)

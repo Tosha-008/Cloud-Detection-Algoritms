@@ -14,7 +14,7 @@ import sys
 project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
 sys.path.append(project_path)
 
-from data import transformations as trf
+# from data import transformations as trf
 from SenSei import utils
 from SenSei.utils import DESCRIPTORS
 

@@ -46,6 +46,7 @@ urllib3
 Werkzeug
 
 tifffile
-tensorflow
+tensorflow==2.14.0
 scikit-learn~=1.5.2
 setuptools
+tensorflow_addons
