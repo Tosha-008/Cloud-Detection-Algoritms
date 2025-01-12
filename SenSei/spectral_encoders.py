@@ -2,11 +2,10 @@ import os
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Conv2D, Concatenate, BatchNormalization, \
     LeakyReLU, Reshape, Dense, Lambda, Permute, Multiply, Add, Activation, Flatten
-import tensorflow.keras.backend as K
 from tensorflow.keras.models import Model
 from tensorflow.keras import regularizers
 import tensorflow_addons as tfa
-
+from tensorflow.keras import backend as K
 from SenSei import SenSei_model as layers
 
 

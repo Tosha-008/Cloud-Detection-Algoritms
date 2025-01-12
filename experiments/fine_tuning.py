@@ -88,7 +88,7 @@ def fine_tuning(config):
     train_loader_sentinel = loader.dataloader(
         train_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=False),
-                         trf.band_select(bands),
+                         trf.band_select(),
                          trf.sometimes(0.1, trf.salt_and_pepper(0.001, 0.001, pepp_value=-1, salt_value=1)),
                          trf.sometimes(0.3, trf.intensity_scale(0.95, 1.05)),
                          trf.sometimes(0.3, trf.intensity_shift(-0.02, 0.02)),

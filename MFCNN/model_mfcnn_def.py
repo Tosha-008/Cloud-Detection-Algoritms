@@ -23,14 +23,14 @@ class DoubleConv(Layer):
                             bias_initializer=self.bias_initializer,
                             kernel_regularizer=l2(self.l2_reg))
         self.bn1 = BatchNormalization(axis=-1, momentum=0.99)
-        self.act1 = LeakyReLU(negative_slope=0.01)
+        self.act1 = LeakyReLU(alpha=0.01) # or negative_slope
 
         self.conv2 = Conv2D(self.out_channels, (3, 3), strides=1, padding='same',
                             kernel_initializer=self.kernel_initializer,
                             bias_initializer=self.bias_initializer,
                             kernel_regularizer=l2(self.l2_reg))
         self.bn2 = BatchNormalization(axis=-1, momentum=0.99)
-        self.act2 = LeakyReLU(negative_slope=0.01)
+        self.act2 = LeakyReLU(alpha=0.01)  # or negative_slope
 
     def call(self, inputs):
         x = self.conv1(inputs)
@@ -67,7 +67,7 @@ class FMM(Layer):
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=l2(self.l2_reg))
-        self.stage1_act = LeakyReLU(negative_slope=0.01)
+        self.stage1_act = LeakyReLU(alpha=0.01)  # or negative_slope
         self.stage1_dc = DoubleConv(128, 96, l2_reg=self.l2_reg,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer)
@@ -121,13 +121,13 @@ class ScaleBlock(Layer):
                             kernel_regularizer=l2(self.l2_reg),
                             kernel_initializer=self.kernel_initializer,
                             bias_initializer=self.bias_initializer)
-        self.relu1 = LeakyReLU(negative_slope=0.01)
+        self.relu1 = LeakyReLU(alpha=0.01)  # or negative_slope
         self.upsample = UpSampling2D(size=(self.pool_size, self.pool_size), interpolation='bilinear')
         self.conv2 = Conv2D(256, (3, 3), padding='same',
                             kernel_regularizer=l2(self.l2_reg),
                             kernel_initializer=self.kernel_initializer,
                             bias_initializer=self.bias_initializer)
-        self.relu2 = LeakyReLU(negative_slope=0.01)
+        self.relu2 = LeakyReLU(alpha=0.01)  # or negative_slope
 
     def call(self, inputs):
         avg_pool = self.avg_pool(inputs)
@@ -238,7 +238,7 @@ class Up(Layer):
         if self.bn:
             self.bn_layer = BatchNormalization(axis=-1, momentum=0.99)
 
-        self.activation = LeakyReLU(negative_slope=0.01)
+        self.activation = LeakyReLU(alpha=0.01)  # or negative_slope
 
     def call(self, inputs):
         x = self.conv(inputs)
@@ -393,7 +393,7 @@ def build_model_mfcnn(num_channels=12, num_classes=1, dropout_p=0.2, l2_reg=0.00
     if num_classes > 1:
         outputs = Activation('softmax')(outputs)
 
-    model = Model(inputs, outputs)
+    model = Model(inputs, outputs, name='mfcnn')
     return model
 
 

@@ -266,11 +266,14 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
             alpha = 0.33 if model_name == 'mfcnn_common' else 0.16
         elif dataset_name == 'Sentinel_2'and model_name in ['mfcnn_common']:
             alpha =  0.52 if model_name == 'mfcnn_common' else 0.5
+        elif model_name in ['sensei_mfcnn']:
+            alpha = 0.485
 
     if model_name in ['cxn', 'mfcnn']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
-    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common']:
+    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common', 'sensei_mfcnn']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -2] > alpha).astype(float)
+
     if model_name == 'cxn':
         # Postprocess predicted mask
         kernel = np.ones((3, 3), np.uint8)
@@ -389,7 +392,7 @@ def adjustment_input(pickle_file, group_name, max_objects=5, shuffle=False):
 
 
 def aggregate_image_metrics(group_folders, dataset_name, model, model_name, display=False, display_chanel=None,
-                            norm_folder=None, fmask_folder=None, alpha=None, predict_uncertainty=False, T=15):
+                            norm_folder=None, fmask_folder=None, alpha=None, predict_uncertainty=False, T=15, descriptors_list=None):
     """
     Calculate metrics for a group of images.
 
@@ -446,7 +449,19 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
             pred_mask = (mean_pred.squeeze()[:, :, -2] > 0.45).astype(float)
             uncertainty_mask = (std_pred.squeeze()[:, :, -2] > 0.1).astype(float)
         else:
-            pred_mask = model.predict(image)
+            if descriptors_list:
+                # image1 = image[..., :-1]
+                image1 = np.moveaxis(image, -1, 1)[..., np.newaxis]
+                descriptors = np.log10(np.array(descriptors_list) - 300) - 2
+                descriptors = (np.expand_dims(descriptors, axis=1))
+                descriptors = np.moveaxis(descriptors, -2, 0)
+                print(f"Image shape: {image1.shape}")
+                print(f"Descriptors shape: {descriptors.shape}")
+
+                pred_mask = model.predict((image1, descriptors))
+            else:
+                pred_mask = model.predict(image)
+
             # Process and evaluate predictions
             metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name, alpha=alpha)
 
@@ -739,19 +754,19 @@ def normalize_image(image, min_value=0, max_value=1, mode=1):
 
 
 def reorder_channels(image, dataset_name, model_name):
-    if model_name in ['mfcnn', 'cxn'] and dataset_name in ['Set_2', 'Biome']:
+    if model_name in ['mfcnn', 'cxn', 'sensei_mfcnn'] and dataset_name in ['Set_2', 'Biome']:
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]]
     elif model_name in ['mfcnn', 'cxn'] and dataset_name == 'Sentinel_2':
         return sentinel_13_to_11(image, variant=2)
     elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common'] and dataset_name in ['Set_2', 'Biome']:
         return landsat_12_to_13(image, variant=1)
-    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common'] and dataset_name == 'Sentinel_2':
+    elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common', 'sensei_mfcnn'] and dataset_name == 'Sentinel_2':
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
 
 
 def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None,
                              max_objects=5, pickle_file=None, shuffle=False, display_chanel=None, predict_uncertainty=False,
-                             T=15):
+                             T=15, descriptors_list=None):
     """
     Display images and masks for a specific cloudiness group and compute accuracy metrics for predictions.
 
@@ -779,7 +794,8 @@ def display_images_for_group(model, model_name, dataset_name, group_name, fmask_
         display=True,
         display_chanel=display_chanel,
         predict_uncertainty=predict_uncertainty,
-        T=T
+        T=T,
+        descriptors_list=descriptors_list
     )
 
     # Display average metrics
@@ -793,7 +809,7 @@ def display_images_for_group(model, model_name, dataset_name, group_name, fmask_
             print(f"{metric.capitalize()}: {value:.2f}")
 
 
-def evaluate_metrics_for_group(pickle_file, group_name, model, model_name, dataset_name, fmask_folder=None, norm_folder=None, sentinel_set=None, max_objects=5):
+def evaluate_metrics_for_group(pickle_file, group_name, model, model_name, dataset_name, fmask_folder=None, norm_folder=None, descriptors_list=None, max_objects=5):
     """
     Calculate average metrics for a specific cloudiness group.
 
@@ -818,7 +834,8 @@ def evaluate_metrics_for_group(pickle_file, group_name, model, model_name, datas
         fmask_folder=fmask_folder,
         model=model,
         model_name=model_name,
-        display=False
+        display=False,
+        descriptors_list=descriptors_list
     )
 
     # Display results
@@ -830,7 +847,7 @@ def evaluate_metrics_for_group(pickle_file, group_name, model, model_name, datas
     return metrics
 
 
-def evaluate_all_groups(pickle_file, output_file, model, model_name, dataset_name, fmask_folder=None, norm_folder=None, sentinel_set=None, max_objects=5):
+def evaluate_all_groups(pickle_file, output_file, model, model_name, dataset_name, fmask_folder=None, norm_folder=None, max_objects=5, descriptors_list=None):
     """
     Evaluate metrics for all groups in a cloudiness pickle file and save results to a JSON file.
 
@@ -862,9 +879,9 @@ def evaluate_all_groups(pickle_file, output_file, model, model_name, dataset_nam
             model_name=model_name,
             fmask_folder=fmask_folder,
             norm_folder=norm_folder,
-            sentinel_set=sentinel_set,
             dataset_name=dataset_name,
             max_objects=max_objects,
+            descriptors_list=descriptors_list
         )
         results[group_name] = metrics
 
@@ -879,7 +896,7 @@ def evaluate_all_groups(pickle_file, output_file, model, model_name, dataset_nam
 
 
 def crossval_alpha_for_group(pickle_file, group_name, model, model_name, dataset_name, norm_folder=None, fmask_folder=None, sentinel_set=None,
-                              alpha_values=None, output_file='alpha_metrics.csv', max_objects=None):
+                              alpha_values=None, output_file='alpha_metrics.csv', max_objects=None, descriptors_list=None):
     """
     Perform cross-validation over a specific cloudiness group to find the best alpha value.
 
@@ -932,7 +949,8 @@ def crossval_alpha_for_group(pickle_file, group_name, model, model_name, dataset
             model=model,
             model_name=model_name,
             display=False,
-            alpha=alpha
+            alpha=alpha,
+            descriptors_list=descriptors_list
         )
 
         avg_accuracy = metrics['predicted']['accuracy']

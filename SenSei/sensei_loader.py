@@ -10,6 +10,7 @@ from tensorflow.keras.utils import Sequence
 import tensorflow as tf
 import warnings
 import sys
+import yaml
 
 project_path = "/home/ladmin/PycharmProjects/cloudFCN-master"
 sys.path.append(project_path)
@@ -316,6 +317,7 @@ class Dataloader(Sequence):
 
         return metadata
 
+
 class CommonBandsDataloader(Dataloader):
 
     def _read(self,path):
@@ -545,3 +547,7 @@ class SlidingWindow(Dataloader):
 
     def _encode_descriptors(self,descriptors):
         return np.log10(descriptors-300) - 2
+
+
+if __name__=='__main__':
+    print(generate_descriptor_dict_from_yaml('/home/ladmin/PycharmProjects/cloudFCN-master/SenSei/landsat_metadata.yaml'))

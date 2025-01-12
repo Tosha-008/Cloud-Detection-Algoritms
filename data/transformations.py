@@ -4,30 +4,30 @@ from scipy import misc
 import time
 import random
 
-def train_base(patch_size,fixed = False):
+def train_base(patch_size, fixed=False):
     """
-    Makes transformation for image/mask pair that is a randomly cropped, rotated
-    and flipped portion of the original.
+    Makes a transformation for image/mask/descriptor triplet that is a randomly cropped,
+    rotated, and flipped portion of the original.
 
     Parameters
     ----------
     patch_size : int
-        Spatial dimension of output image/mask pair (assumes Width==Height).
+        Spatial dimension of the output image/mask pair (assumes Width == Height).
     fixed : bool, optional
-        If True, always take patch from top-left of scene, with no rotation or
-        flipping. This is useful for validation and reproducability.
+        If True, always take the patch from the top-left of the scene, with no rotation
+        or flipping. This is useful for validation and reproducibility.
 
     Returns
     -------
     apply_transform : func
-        Transformation for image/mask pairs.
+        Transformation for image/mask/descriptor triplets.
     """
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         crop_size = patch_size
 
         if img.shape[0] < crop_size or img.shape[1] < crop_size:
-            return img, mask
+            return img, mask, descriptors if descriptors is not None else img, mask
 
         if fixed:
             left = 0
@@ -51,29 +51,94 @@ def train_base(patch_size,fixed = False):
         if img.shape[0] != crop_size or img.shape[1] != crop_size:
             print(f"Warning: the final image size is {img.shape}, but ({crop_size}, {crop_size}) was expected")
 
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
+
 
     return apply_transform
 
-def band_select(bands):
-    """
-    Return image/mask pair where spectral bands in image have been selected as a list.
 
-    Parameters
-    ----------
-    bands : list
-        Spectral bands, defined with respect to input's final dimension.
+# def band_select(bands):
+#     """
+#     Return image/mask pair where spectral bands in image have been selected as a list.
+#
+#     Parameters
+#     ----------
+#     bands : list
+#         Spectral bands, defined with respect to input's final dimension.
+#
+#     Returns
+#     -------
+#     apply_transform : func
+#         Transformation for image/mask pairs.
+#     """
+#     def apply_transform(img, mask):
+#         if bands is not None:
+#             img = img[..., bands]
+#         return img, mask
+#     return apply_transform
+
+def band_select():
+    """
+    Return a transformation function for selecting spectral bands in an image
+    and extracting descriptors, with optional padding.
 
     Returns
     -------
     apply_transform : func
-        Transformation for image/mask pairs.
+        Transformation for image/mask pairs and optionally descriptors.
     """
-    def apply_transform(img, mask):
-        if bands is not None:
-            img = img[..., bands]
-        return img, mask
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
+        """
+        Apply the band selection transformation to an image and mask pair.
+
+        Parameters
+        ----------
+        ...
+        band_policy : str / list / int / tuple
+            Specifies how bands should be selected.
+
+        Returns
+        -------
+        ...
+        """
+        if band_policy is None:
+            raise ValueError("band_policy must be specified.")
+
+        padding = 0  # Default no padding
+        if band_policy == "all":
+            selected_indices = list(range(img.shape[-1]))
+        elif band_policy == "RGB":
+            selected_indices = [3, 2, 1]  # Assuming RGB corresponds to the first three bands
+        elif isinstance(band_policy, list):
+            selected_indices = band_policy
+        elif isinstance(band_policy, int):
+            available_indices = list(range(img.shape[-1]))
+            if band_policy <= len(available_indices):
+                selected_indices = np.random.choice(available_indices, band_policy, replace=False)
+            else:
+                selected_indices = available_indices
+                padding = band_policy - len(available_indices)
+        else:
+            raise ValueError(f"Unrecognized band policy: {band_policy}")
+
+        # Select bands from the image
+        img = img[..., selected_indices]
+
+        # Optionally, extract descriptors
+        selected_descriptors = None
+        if descriptors is not None:
+            selected_descriptors = [descriptors[i] for i in selected_indices]
+
+        # Apply padding if needed
+        if padding > 0:
+            img = np.concatenate([img, -0.5 * np.ones((*img.shape[:-1], padding))], axis=-1)
+            if selected_descriptors is not None:
+                selected_descriptors = np.concatenate([selected_descriptors, -np.ones((padding, *descriptors.shape[1:]))], axis=0)
+
+        return (img, mask, selected_descriptors) if selected_descriptors is not None else (img, mask)
+
     return apply_transform
+
 
 
 def class_merge(class1, class2):
@@ -94,10 +159,10 @@ def class_merge(class1, class2):
         Transformation for image/mask pairs.
     """
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         mask[..., class1] += mask[..., class2]
         mask = mask[..., np.arange(mask.shape[-1]) != class2]
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 def sometimes(p, transform):
@@ -117,12 +182,12 @@ def sometimes(p, transform):
         Transformation for image/mask pairs.
     """
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         random_apply = random.random() < p
         if random_apply:
-            return transform(img, mask)
+            return transform(img, mask, descriptors) if descriptors is not None else transform(img, mask)
         else:
-            return img, mask
+            return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -143,10 +208,10 @@ def chromatic_shift(shift_min=-0.10, shift_max=0.10):
         Transformation for image/mask pairs.
     """
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         img = img + np.random.uniform(low=shift_min,
                                       high=shift_max, size=[1, 1, img.shape[-1]]).astype(np.float32)
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -166,10 +231,10 @@ def chromatic_scale(factor_min=0.90, factor_max=1.10):
     apply_transform : func
         Transformation for image/mask pairs.
     """
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         img = img * np.random.uniform(low=factor_min,
                                       high=factor_max, size=[1, 1, img.shape[-1]]).astype(np.float32)
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -189,9 +254,9 @@ def intensity_shift(shift_min=-0.10, shift_max=0.10):
     apply_transform : func
         Transformation for image/mask pairs.
     """
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         img = img + (shift_max-shift_min)*random.random()+shift_min
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -211,9 +276,9 @@ def intensity_scale(factor_min=0.95, factor_max=1.05):
     apply_transform : func
         Transformation for image/mask pairs.
     """
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         img = img * random.uniform(factor_min, factor_max)
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -232,9 +297,9 @@ def white_noise(sigma=0.1):
         Transformation for image/mask pairs.
     """
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         noise = (np.random.randn(*img.shape) * sigma).astype(np.float32)
-        return img + noise, mask
+        return (img + noise, mask, descriptors) if descriptors is not None else (img + noise, mask)
     return apply_transform
 
 
@@ -258,7 +323,7 @@ def bandwise_salt_and_pepper(salt_rate, pepp_rate, pepp_value=0, salt_value=255)
     apply_transform : func
         Transformation for image/mask pairs.
     """
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         salt_mask = np.random.choice([False, True], size=img.shape, p=[
                                      1 - salt_rate, salt_rate])
         pepp_mask = np.random.choice([False, True], size=img.shape, p=[
@@ -267,7 +332,7 @@ def bandwise_salt_and_pepper(salt_rate, pepp_rate, pepp_value=0, salt_value=255)
         img[salt_mask] = salt_value
         img[pepp_mask] = pepp_value
 
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -291,7 +356,7 @@ def salt_and_pepper(salt_rate, pepp_rate, pepp_value=0, salt_value=255):
     apply_transform : func
         Transformation for image/mask pairs.
     """
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         salt_mask = np.random.choice(
             [False, True], size=img.shape[:-1], p=[1 - salt_rate, salt_rate])
         pepp_mask = np.random.choice(
@@ -300,7 +365,7 @@ def salt_and_pepper(salt_rate, pepp_rate, pepp_value=0, salt_value=255):
         img[salt_mask] = [salt_value for i in range(img.shape[-1])]
         img[pepp_mask] = [pepp_value for i in range(img.shape[-1])]
 
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -327,11 +392,11 @@ def quantize(number_steps, min_value=0, max_value=255, clip=False):
     """
     stepsize = (max_value-min_value)/number_steps
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         img = (img//stepsize)*stepsize
         if clip:
             img = np.clip(img, min_value, max_value)
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
@@ -352,7 +417,7 @@ def normalize_to_range(min_value=0.0, max_value=1.0):
         Transformation for image/mask pairs.
     """
 
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         """
         Applies normalization to the image.
 
@@ -381,13 +446,13 @@ def normalize_to_range(min_value=0.0, max_value=1.0):
         # Scale to [min_value, max_value]
         normalized_image = normalized_image * (max_value - min_value) + min_value
 
-        return normalized_image, mask
+        return (normalized_image, mask, descriptors) if descriptors is not None else (normalized_image, mask)
 
     return apply_transform
 
 
 def sentinel_13_to_11():
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
 
         if img.shape[-1] != 13:
             print(f"Skipping: expected 13 channels, found {img.shape[-1]}")
@@ -412,12 +477,12 @@ def sentinel_13_to_11():
 
         final_image = np.stack(selected_channels, axis=-1)
         img = np.concatenate((final_image, black_layer), axis=-1)  # Nodata layer
-        return img, mask
+        return (img, mask, descriptors) if descriptors is not None else (img, mask)
     return apply_transform
 
 
 def landsat_12_to_13():
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         if img.shape[-1] != 12:
             print(f"Skipping: expected 11 channels, found {img.shape[-1]}")
             return None
@@ -446,18 +511,92 @@ def landsat_12_to_13():
         ]
 
         final_image = np.stack(selected_channels_1, axis=-1)
-        # for i in range(final_image.shape[-1]):  # Количество каналов
+        # for i in range(final_image.shape[-1]):
         #     print(f"Channel {i}: {final_image[:, :, i].min()} - {final_image[:, :, i].max()}")
 
-        return final_image, mask
+        return (final_image, mask, descriptors) if descriptors is not None else (final_image, mask)
     return apply_transform
 
 def change_mask_channels_2_3():
     """Combines mask channels based on the dataset type."""
-    def apply_transform(img, mask):
+    def apply_transform(img, mask, descriptors=None, band_policy=None):
         combined = np.zeros((mask.shape[0], mask.shape[1], 3))
         combined[:, :, 0] = mask[:, :, 0]
         combined[:, :, 1] = mask[:, :, 2]  # Swap channels 2 and 3
         combined[:, :, 2] = mask[:, :, 1]
-        return img, combined
+        return (img, combined, descriptors) if descriptors is not None else (img, combined)
+    return apply_transform
+
+
+def encode_descriptors(descriptor_style):
+    """
+    Returns a transformation function for encoding descriptors based on a given style.
+
+    Parameters
+    ----------
+    descriptor_style : str
+        Encoding style for the descriptors. Options:
+        - 'bandpass': Applies bandpass encoding.
+        - 'log': Applies logarithmic encoding.
+
+    Returns
+    -------
+    apply_transform : func
+        A transformation function that encodes descriptors based on the specified style.
+    """
+    def apply_transform(img, mask, descriptors, band_policy=None):
+        """
+        Encodes the descriptors based on the specified style.
+
+        Parameters
+        ----------
+        img : np.ndarray
+            Image data (unchanged in this transformation).
+        mask : np.ndarray
+            Mask data (unchanged in this transformation).
+        descriptors : np.ndarray
+            Descriptors to be encoded.
+
+        Returns
+        -------
+        img : np.ndarray
+            Unchanged image data.
+        mask : np.ndarray
+            Unchanged mask data.
+        descriptors : np.ndarray
+            Encoded descriptors.
+        """
+        descriptors = np.array(descriptors, dtype=np.float32)
+        if descriptor_style == 'bandpass':
+            centres = descriptors[:, 1]
+            widths = 1.5 * np.log((descriptors[:, 2] - descriptors[:, 0]) / centres) / np.log(15) + 1.5
+
+            RGB_min, RGB_max = 400, 680
+            RGB_centre = (RGB_max + RGB_min) / 2
+            NIR_min, NIR_max = 680, 1100
+            NIR_centre = (NIR_max + NIR_min) / 2
+            cirr_min, cirr_max = 1100, 1600
+            cirr_centre = (cirr_max + cirr_min) / 2
+            SWIR_min, SWIR_max = 1100, 3000
+            SWIR_centre = (SWIR_max + SWIR_min) / 2
+            TIR_min, TIR_max = 9000, 13000
+            TIR_centre = (TIR_max + TIR_min) / 2
+
+            RGB_pass = 0.5 + 0.5 * np.tanh(1 * (centres - RGB_centre) / (RGB_max - RGB_centre))
+            NIR_pass = 0.5 + 0.5 * np.tanh(1.5 * (centres - NIR_centre) / (NIR_max - NIR_centre))
+            cirr_pass = 0.5 + 0.5 * np.tanh(2 * (centres - cirr_centre) / (cirr_max - cirr_centre))
+            SWIR_pass = 0.5 + 0.5 * np.tanh(2 * (centres - SWIR_centre) / (SWIR_max - SWIR_centre))
+            TIR_pass = 0.5 + 0.5 * np.tanh(2 * (centres - TIR_centre) / (TIR_max - TIR_centre))
+
+            descriptors = np.stack([RGB_pass, NIR_pass, cirr_pass, SWIR_pass, TIR_pass, widths], axis=1)
+
+        elif descriptor_style == 'log':
+            # Apply the transformation
+            descriptors = np.log10(descriptors - 300) - 2
+
+        else:
+            raise ValueError(f"Unsupported descriptor style: {descriptor_style}")
+
+        return img, mask, descriptors
+
     return apply_transform

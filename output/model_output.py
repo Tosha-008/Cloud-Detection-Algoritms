@@ -17,7 +17,7 @@ num_batches_to_show = 1
 
 model_path_1 = "/home/ladmin/PycharmProjects/cloudFCN-master/mfcnn_common_model/mfcnn_44_commonmodel.keras"
 model_path_2 = '/home/ladmin/PycharmProjects/cloudFCN-master/models/model_mfcnn_384_50_200_2.keras'
-metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/.cadence/cache/Dac3ba21ea1f4b098137cb6c88b856b0/16534/outputs/training_history_mfcnn_50_200_commonmodel.json"
+metrics_path = "/home/ladmin/PycharmProjects/cloudFCN-master/training_history_sensei_mfcnn_75_300.json"
 dataset_path = "/media/ladmin/Vault/Splited_biome_384"  # Biome
 dataset_path_2 = '/Volumes/Vault/Splited_set_2_384'  # Set 2 for test
 set2_398 = "/media/ladmin/Vault/Splited_set_2_398"  # Set 2 398 for test
@@ -54,7 +54,7 @@ custom_objects = {
     'OutConv': OutConv
 }
 
-model = load_model(model_path_1, custom_objects=custom_objects)
+# model = load_model(model_path_1, custom_objects=custom_objects)
 
 
 if main_set == "Biome" or main_set == "Set_2":
@@ -115,12 +115,12 @@ if main_set == "Sentinel_2":
 #                       dataset_name=main_set,
 #                       model_name=main_model)
 
-plot_batches(gen=test_,
-             model=model,
-             num_batches_to_show=num_batches_to_show,
-             show_masks_pred=True,
-             dataset_name=main_set,
-             model_name=main_model)
+# plot_batches(gen=test_,
+#              model=model,
+#              num_batches_to_show=num_batches_to_show,
+#              show_masks_pred=True,
+#              dataset_name=main_set,
+#              model_name=main_model)
 
 # # Plot metrics only if specified
-# plot_metrics(metrics_path, show_metrics=True)
+plot_metrics(metrics_path, show_metrics=True)
