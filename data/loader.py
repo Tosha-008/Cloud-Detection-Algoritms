@@ -131,7 +131,8 @@ def dataloader_descriptors(dataset, batch_size, transformations=None,
 
                 if isinstance(im, str) or isinstance(mask, str):
                     im = np.load(im, allow_pickle=True).astype("float")
-                    im = im[..., :-1]
+                    if im.shape[-1] == 12:
+                        im = im[..., :-1]
                     mask = np.load(mask, allow_pickle=True)
 
                 descriptors = descriptor_list  # Default descriptors

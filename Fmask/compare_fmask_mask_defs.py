@@ -271,8 +271,11 @@ def process_and_evaluate(pred_mask, mask, binary_fmask=None, model_name='mfcnn',
 
     if model_name in ['cxn', 'mfcnn']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -1] > alpha).astype(float)
-    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common', 'sensei_mfcnn']:
+    elif model_name in ['cxn_sentinel', 'mfcnn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common']:
         pred_mask_binary = (pred_mask.squeeze()[:, :, -2] > alpha).astype(float)
+    elif model_name in ['sensei_mfcnn']:
+        pred_mask_binary = np.argmax(pred_mask.squeeze(), axis=-1)
+        pred_mask_binary = 1 - pred_mask_binary
 
     if model_name == 'cxn':
         # Postprocess predicted mask
@@ -443,40 +446,48 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
         # Load and preprocess data
         image, mask, binary_fmask = load_and_preprocess(image_path, mask_path, fmask_path, dataset_name, model_name)
 
+        # Prepare descriptors if needed
+        descriptors = None
+        image1 = image
+        if descriptors_list:
+            if dataset_name in ['Set_2', 'Biome']:
+                image1 = image[..., :-1]  # Adjust image for specific datasets
+            image1 = np.moveaxis(image1, -1, 1)[..., np.newaxis]  # Move channels to correct position
+            descriptors = np.log10(np.array(descriptors_list) - 300) - 2
+            descriptors = np.expand_dims(descriptors, axis=1)
+            descriptors = np.moveaxis(descriptors, -2, 0)
+
         # Predict mask using the model
         if predict_uncertainty:
-            mean_pred, std_pred = predict_with_uncertainty(model, image, T=T)
-            pred_mask = (mean_pred.squeeze()[:, :, -2] > 0.45).astype(float)
-            uncertainty_mask = (std_pred.squeeze()[:, :, -2] > 0.1).astype(float)
+            pred_mask, std_pred = predict_with_uncertainty(model, image1, descriptors=descriptors, T=T)
+            # pred_mask = (mean_pred.squeeze()[:, :, -2] > 0.45).astype(float)
+            # uncertainty_mask = (std_pred.squeeze()[:, :, -2] > 0.1).astype(float)
         else:
-            if descriptors_list:
-                # image1 = image[..., :-1]
-                image1 = np.moveaxis(image, -1, 1)[..., np.newaxis]
-                descriptors = np.log10(np.array(descriptors_list) - 300) - 2
-                descriptors = (np.expand_dims(descriptors, axis=1))
-                descriptors = np.moveaxis(descriptors, -2, 0)
-                print(f"Image shape: {image1.shape}")
-                print(f"Descriptors shape: {descriptors.shape}")
-
+            if descriptors is not None:
                 pred_mask = model.predict((image1, descriptors))
+
             else:
-                pred_mask = model.predict(image)
+                pred_mask = model.predict(image1)
 
-            # Process and evaluate predictions
-            metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name, alpha=alpha)
+        # Process and evaluate predictions
+        metrics, pred_mask_binary = process_and_evaluate(pred_mask, mask, binary_fmask, model_name, dataset_name,
+                                                         alpha=alpha)
+        if predict_uncertainty:
+            pred_mask = np.argmax(pred_mask.squeeze(), axis=-1)
+            pred_mask = 1 - pred_mask
 
-            # Accumulate predicted metrics
-            all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
-            all_metrics_pred["precision"].append(metrics["predicted"]["precision"])
-            all_metrics_pred["recall"].append(metrics["predicted"]["recall"])
-            all_metrics_pred["f1"].append(metrics["predicted"]["f1"])
+        # Accumulate predicted metrics
+        all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
+        all_metrics_pred["precision"].append(metrics["predicted"]["precision"])
+        all_metrics_pred["recall"].append(metrics["predicted"]["recall"])
+        all_metrics_pred["f1"].append(metrics["predicted"]["f1"])
 
-            # Accumulate Fmask metrics if available
-            if binary_fmask is not None:
-                all_metrics_fmask["accuracy"].append(metrics["fmask"]["accuracy"])
-                all_metrics_fmask["precision"].append(metrics["fmask"]["precision"])
-                all_metrics_fmask["recall"].append(metrics["fmask"]["recall"])
-                all_metrics_fmask["f1"].append(metrics["fmask"]["f1"])
+        # Accumulate Fmask metrics if available
+        if binary_fmask is not None:
+            all_metrics_fmask["accuracy"].append(metrics["fmask"]["accuracy"])
+            all_metrics_fmask["precision"].append(metrics["fmask"]["precision"])
+            all_metrics_fmask["recall"].append(metrics["fmask"]["recall"])
+            all_metrics_fmask["f1"].append(metrics["fmask"]["f1"])
 
         print(f"Processed {idx}/{total_paths} folders ({(idx / total_paths) * 100:.2f}%)")
 
@@ -1260,7 +1271,7 @@ def classify_no_clouds(predicted_mask, binary_mask, model_name, using=False):
     return binary_mask
 
 
-def predict_with_uncertainty(model, image, T=100):
+def predict_with_uncertainty(model, image, descriptors=None, T=10):
     """
     Perform multiple forward passes with active MC-Dropout to estimate uncertainty.
 
@@ -1275,7 +1286,10 @@ def predict_with_uncertainty(model, image, T=100):
     """
 
     f_model = MCDropoutModel(model)
-    preds = np.array([f_model(image, training=True).numpy() for _ in range(T)])
+    if descriptors is not None:
+        preds = np.array([f_model((image, descriptors), training=True).numpy() for _ in range(T)])
+    else:
+        preds = np.array([f_model(image, training=True).numpy() for _ in range(T)])
     mean_pred = preds.mean(axis=0)
     std_pred = preds.std(axis=0)
 

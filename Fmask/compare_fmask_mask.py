@@ -67,7 +67,7 @@ model_path_5 = '/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/mod
 model_path_6 = '/home/ladmin/PycharmProjects/cloudFCN-master/mfcnn_common_model/mfcnn_44_commonmodel.keras'
 model_path_7 = '/home/ladmin/PycharmProjects/cloudFCN-master/SenSei/sensei_mfcnn_75_300.keras'
 
-main_set = dataset_3
+main_set = dataset_2
 main_model = model_name_4
 model = load_model(model_path_7, custom_objects=custom_objects, safe_mode=False)
 
@@ -103,15 +103,15 @@ else:
 #     descriptors_list=descriptors_list
 # )
 
-metrics_for_all_groups = "metrics_for_all_groups_sensei_mfcnn_sentinel_0485.json"
+metrics_for_all_groups = "metrics_for_all_groups_sensei_mfcnn_landsat_argmax.json"
 evaluate_all_groups(
-    pickle_file=cloudiness_groups_path_sentinel_test_small,
+    pickle_file=cloudiness_groups_path_set2,
     output_file=metrics_for_all_groups,
     model=model,
     model_name=main_model,
     dataset_name=main_set,
-    fmask_folder=None,
-    norm_folder=None,
+    fmask_folder=fmask_folder,
+    norm_folder=norm_folder,
     max_objects=100,
     descriptors_list=descriptors_list
 )
@@ -135,14 +135,14 @@ print("Analysis complete. Results saved to", metrics_for_all_groups)
 #                          model_name=main_model,
 #                          dataset_name=main_set,
 #                          group_name='middle',
-#                          fmask_folder=None,
-#                          norm_folder=None,
-#                          max_objects=10,
-#                          shuffle=False,
-#                          pickle_file=cloudiness_groups_path_sentinel_test_small,  # 'low', 'middle', 'high', 'only clouds', 'no clouds', 'no filter'
-#                          display_chanel=None,
+#                          fmask_folder=fmask_folder,
+#                          norm_folder=norm_folder,
+#                          max_objects=20,
+#                          shuffle=True,
+#                          pickle_file=cloudiness_groups_path_set2,  # 'low', 'middle', 'high', 'only clouds', 'no clouds', 'no filter'
+#                          display_chanel=2,
 #                          predict_uncertainty=False,
-#                          T=15,
+#                          T=10,
 #                          descriptors_list=descriptors_list)
 #
 # all_paths_set_landsat = load_paths('/home/ladmin/PycharmProjects/cloudFCN-master/for_fine_tuning/cache_train_Biome_96.pkl')
