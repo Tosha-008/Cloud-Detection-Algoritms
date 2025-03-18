@@ -23,9 +23,23 @@ from data.loader import load_paths
 
 def fit_model(config):
     """
-    Return trained keras model. Main training function for cloud detection. Parameters
-    contained in config file.
+    Trains a cloud detection model using a given configuration.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary containing:
+        - `io_options`: Paths for input/output data.
+        - `fit_options`: Training parameters (batch size, epochs, etc.).
+        - `model_options`: Model-specific parameters (number of bands, classes, etc.).
+
+    Returns
+    -------
+    model : keras.Model
+        Trained Keras model.
     """
+
+    # Load configuration parameters
     io_opts = config['io_options']
     model_load_path = io_opts['model_load_path']
     model_save_path = io_opts['model_save_path']
@@ -49,6 +63,8 @@ def fit_model(config):
     valid_loader_path = io_opts["valid_loader_path"]
     test_loader_path = io_opts["test_loader_path"]
 
+
+    # Define model checkpoint path
     if model_checkpoint_dir is not None:
         chkpnt_path = os.path.join(
             model_checkpoint_dir, 'weights_2.{epoch:02d}-{val_loss:.2f}.keras')
@@ -65,6 +81,7 @@ def fit_model(config):
     #     valid_paths = list(dict.fromkeys(os.path.dirname(path) for path in valid_paths))
     # test_set = load_paths(test_loader_path)
 
+    # If training data is not preloaded, split dataset into train/valid/test
     if not train_set:
         train_path, valid_paths, test_paths = train_valid_test(data_path,
                                                                train_ratio=0.8,
@@ -81,6 +98,8 @@ def fit_model(config):
         test_set = LandsatDataset(test_paths, cache_file=f"cache_test_{dataset_name}_{len(test_paths)}.pkl")
         print("After creating LandsatDataset objects")
 
+
+    # Create train data loader
     train_loader = loader.dataloader(
         train_set, batch_size, patch_size,
         transformations=[trf.train_base(patch_size),
@@ -108,6 +127,8 @@ def fit_model(config):
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
+
+    # Create validation loaders
     foga_valid_sets = [LandsatDataset(valid_path, save_cache=False) for valid_path in valid_paths]
     foga_valid_loaders = [
         loader.dataloader(
@@ -122,6 +143,8 @@ def fit_model(config):
             num_classes=num_classes,
             num_channels=num_channels,
             left_mask_channels=num_classes) for valid_set in foga_valid_sets]
+
+    # Reduce validation set size for evaluation
     summary_valid_set = randomly_reduce_list(summary_valid_set, summary_valid_percent)
     summary_batch_size = 12
     summary_steps = len(summary_valid_set) // summary_batch_size
@@ -137,6 +160,8 @@ def fit_model(config):
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
+
+    # Load or initialize the model
     if model_load_path:
         model = load_model(model_load_path)
 
@@ -167,6 +192,7 @@ def fit_model(config):
     else:
         raise ValueError('Choose correct model`s name')
 
+    # Create data generators
     train_gen = train_loader()
     summary_valid_gen = summary_valid_loader()
     foga_valid_gens = [foga_valid_loader()
@@ -179,6 +205,8 @@ def fit_model(config):
         callback_list.append(ModelCheckpoint(chkpnt_path, monitor='val_loss', verbose=0,
                                              save_best_only=True, save_weights_only=False,
                                              save_freq='epoch'))
+
+    # Train the model
     history = model.fit(
         train_gen,
         validation_data=summary_valid_gen,
@@ -188,6 +216,7 @@ def fit_model(config):
         verbose=1,
         callbacks=callback_list)
 
+    # Save training history
     try:
         history_path = os.path.join(
             os.path.dirname(model_save_path),

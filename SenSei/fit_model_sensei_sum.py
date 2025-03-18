@@ -33,7 +33,17 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_policy(policy)
 
 def fit_sensei(config):
+    """
+    Main function to train the SEnSeI model.
 
+    Parameters:
+        config (dict): Dictionary containing model settings, data paths, and hyperparameters.
+
+    Returns:
+        train_loader, valid_loader, display_loader: Data loaders for training, validation, and display.
+    """
+
+    # Extracting necessary options from the config file
     io_opts = config['io_options']
     model_save_path = io_opts['model_save_path']
     model_name = io_opts['model_name']
@@ -53,13 +63,17 @@ def fit_sensei(config):
     model_load_path = io_opts['model_load_path']
     fine_tune = fit_opts['fine_tune']
 
+    # Define model save path
     model_save_path = os.path.join(model_save_path,
                                    f'model_{model_name}_{epochs}_{steps_per_epoch}_commonmodel_lowclouds.keras')
 
+    # Load the SEnSeI model or define the number of input channels based on the dataset
     if model_name == 'sensei':
         BANDS = (3,14)  # samples random set of bands numbering between 3-14
         bandsin = Input(shape=(None, None, None, 1))
         descriptorsin = Input(shape=(None, 3))
+
+        # Load the pretrained model with custom layers
         sensei_pretrained = load_model(
                     model_load_path,
                     custom_objects={        #annoying requirement when using custom layers
@@ -78,7 +92,7 @@ def fit_sensei(config):
         else:
             NUM_CHANNELS=13
 
-    # ---DeepLabv3---
+    # Define the DeepLabv3 segmentation model
     if config['MODEL_TYPE']=='DeepLabv3':
         main_model = Deeplabv3(
                         input_shape=(config['PATCH_SIZE'], config['PATCH_SIZE'], NUM_CHANNELS),
@@ -89,18 +103,21 @@ def fit_sensei(config):
         print('MODEL_TYPE not recognised')
         sys.exit()
 
+    # Define final model architecture
     if model_name == 'sensei':
         outs = main_model(feature_map)
         model = Model(inputs=(bandsin,descriptorsin), outputs=outs)
     else:
         model = main_model
 
+    # Load dataset paths from pickle files
     with open(sentinel_paths, "rb") as f:
         sentinel_set = pickle.load(f)
 
     with open(data_path_landsat, "rb") as f:
         landsat_set = pickle.load(f)
 
+    # Adjust dataset paths for Sentinel-2 images
     train_set_sentinel = [
         (
             image_path.replace('/media/ladmin/Vault/Sentinel_2', './Sentinel_data'),
@@ -116,6 +133,8 @@ def fit_sensei(config):
         )
         for image_path, mask_path in sentinel_set["valid_set"]
     ]
+
+    # Adjust dataset paths for Landsat images
     train_set_landsat = [
         (path.replace('/media/ladmin/Vault/Splited_biome_384', './landsat_data'))
         for path in landsat_set["train_set"]
@@ -128,6 +147,7 @@ def fit_sensei(config):
     ]
     valid_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in valid_set_landsat]
 
+    # Define data loaders for Sentinel and Landsat datasets with transformations
     train_loader_sentinel = loader.dataloader(
         train_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=False),

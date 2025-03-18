@@ -20,11 +20,26 @@ from MFCNN import model_mfcnn_def
 
 
 
+
 def fine_tuning(config):
     """
-    Return trained keras model. Main training function for cloud detection. Parameters
-    contained in config file.
+    Trains a cloud detection model using Sentinel and Landsat datasets.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary loaded from a JSON file. Contains:
+        - `io_options`: Paths to datasets and model saving locations.
+        - `fit_options`: Training parameters (batch size, epochs, steps per epoch).
+        - `model_options`: Model settings (number of bands, classes, etc.).
+
+    Returns
+    -------
+    model : keras.Model
+        Trained Keras model.
     """
+
+    # Load configuration parameters
     io_opts = config['io_options']
     model_save_path = io_opts['model_save_path']
     model_name = io_opts['model_name']
@@ -47,6 +62,7 @@ def fine_tuning(config):
     model_save_path = os.path.join(model_save_path,
                                    f'model_{model_name}_{epochs}_{steps_per_epoch}_commonmodel_lowclouds.keras')
 
+    # Determine the number of input channels
     if bands is not None:
         num_channels = len(bands)
     else:
@@ -58,6 +74,7 @@ def fine_tuning(config):
     with open(data_path_landsat, "rb") as f:
         landsat_set = pickle.load(f)
 
+    # Prepare Sentinel and Landsat dataset paths
     train_set_sentinel = [
         (
             image_path.replace('/media/ladmin/Vault/Sentinel_2', './Data_Common'),
@@ -85,6 +102,7 @@ def fine_tuning(config):
     ]
     valid_set_landsat = [(f"{path}/image.npy", f"{path}/mask.npy") for path in valid_set_landsat]
 
+    # Create data loaders for Sentinel and Landsat datasets
     train_loader_sentinel = loader.dataloader(
         train_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=False),
@@ -151,6 +169,7 @@ def fine_tuning(config):
         num_channels=num_channels,
         left_mask_channels=num_classes)
 
+    # Compute validation steps
     total_valid_img = len(valid_set_sentinel) + len(valid_set_landsat)
     landsat_steps = int(0.5 * total_valid_img) // batch_size
     sentinel_steps = int(0.5 * total_valid_img) // batch_size
@@ -165,9 +184,11 @@ def fine_tuning(config):
     train_gen_landsat = train_loader_landsat()
     valid_gen_landsat = valid_loader_landsat()
 
+    # Create generators for training and validation
     mixed_gen_train = loader.combined_generator(train_gen_sentinel, train_gen_landsat, sentinel_weight=0.5, landsat_weight=0.5)
     mixed_gen_valid = loader.combined_generator(valid_gen_sentinel, valid_gen_landsat, sentinel_weight=0.5, landsat_weight=0.5, seed=42)
 
+    # Callbacks for training
     csv_logger_save_root = os.path.join(
         os.path.dirname(model_save_path), f'training_log_commonmodel_lowclouds_{model_name}_{epochs}.csv'
     )
@@ -192,6 +213,7 @@ def fine_tuning(config):
     # Combine callbacks
     callbacks = [model_checkpoint, csv_logger]
 
+    # Load or initialize the model
     if model_load_path:
         model = load_model(model_load_path)
     elif model_name == "mfcnn" and not fine_tune:
@@ -207,6 +229,7 @@ def fine_tuning(config):
     else:
         raise ValueError('Choose correct model`s name')
 
+    # Fine-tuning: Unfreeze selected layers
     if fine_tune:
         for layer in model.layers:
                 layer.trainable = True
@@ -226,6 +249,7 @@ def fine_tuning(config):
         )
         model.summary()
 
+    # Train the model
     history = model.fit(
         mixed_gen_train,
         validation_data=mixed_gen_valid,
@@ -235,6 +259,7 @@ def fine_tuning(config):
         verbose=1,
         callbacks=callbacks)
 
+    # Save training history
     try:
         history_path = os.path.join(
             os.path.dirname(model_save_path),

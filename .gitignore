@@ -114,3 +114,6 @@ dmypy.json
 .DS_Store
 /models/
 /training_history/
+/Sentinel_data/
+/landsat_data/
+/.venv1/

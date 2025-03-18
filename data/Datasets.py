@@ -1,10 +1,19 @@
+import pickle
 import numpy as np
 import os
 from random import shuffle
+import random
 import math
-import pickle
-from random import shuffle
 
+"""
+This script is designed for loading, processing, and splitting Landsat and Sentinel datasets. It:
+
+    Loads image-mask pairs from specified directories.
+    Caches dataset paths to improve efficiency.
+    Allows random dataset reduction for sampling.
+    Computes channel-wise means for image normalization.
+    Splits datasets into train, validation, and test sets.
+"""
 
 class Dataset():
     """
@@ -152,6 +161,34 @@ class LandsatDataset(Dataset):
 
 
 def train_valid_test(big_dir, train_ratio=0.7, test_ratio=0.1, dataset='Biome', only_test=False, no_test=False):
+    """
+    Splits dataset into training, validation, and test sets.
+
+    Parameters
+    ----------
+    big_dir : str
+        Root directory containing dataset.
+    train_ratio : float, optional
+        Proportion of dataset for training.
+    test_ratio : float, optional
+        Proportion of dataset for testing.
+    dataset : str, optional
+        Dataset type (default is 'Biome').
+    only_test : bool, optional
+        If True, returns only the test set.
+    no_test : bool, optional
+        If True, excludes test set.
+
+    Returns
+    -------
+    train_set : list
+        Training dataset paths.
+    validation_set : list
+        Validation dataset paths.
+    test_set : list
+        Test dataset paths.
+    """
+
     bioms_names = ['Barren', 'Forest', 'Grass_Crops', 'Shrubland', 'Snow_Ice', 'Urban', 'Water', 'Wetlands']  # _ can be changed
     train_set = []
     validation_set = []
@@ -215,9 +252,6 @@ def train_valid_test(big_dir, train_ratio=0.7, test_ratio=0.1, dataset='Biome', 
     return train_set, validation_set, test_set
 
 
-import random
-
-
 def train_valid_test_sentinel(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, shuffle=True):
     """
     Splits a dataset into training, validation, and test sets based on specified ratios.
@@ -268,11 +302,23 @@ def train_valid_test_sentinel(dataset, train_ratio=0.7, val_ratio=0.15, test_rat
     return train_set, val_set, test_set
 
 
-
 def randomly_reduce_list(paths, factor):
     """
-    Randomly reduces the list of paths to a sample of the original, with count len(paths) * factor.
+    Reduces a list of dataset paths by a given factor.
+
+    Parameters
+    ----------
+    paths : list
+        List of dataset paths.
+    factor : float
+        Reduction factor (0 to 1).
+
+    Returns
+    -------
+    sampled_paths : list
+        Reduced list of dataset paths.
     """
+
     new_length = int(len(paths) * factor)
 
     if new_length > len(paths):

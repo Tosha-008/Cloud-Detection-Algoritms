@@ -1,12 +1,16 @@
-# CloudFCN
+# Optimization and Comparison of Cloud Detection Algorithms
 
-CloudFCN is a python 3 package for developing and evaluating Fully Convolutional Networks, specifically for cloud-masking. Currently, the [Biome dataset](https://landsat.usgs.gov/landsat-8-cloud-cover-assessment-validation-data) for Landsat 8 is supported.
+CloudMask Optimizer is a Python 3 package designed for the optimization, evaluation, and comparison of cloud detection algorithms 
+for satellite imagery. The project integrates multiple deep learning models, including MFCNN, CloudFCN, CXN, and SEnSeI, 
+to assess and enhance cloud-masking accuracy. The primary focus is on optimizing hyperparameters, improving model generalization, 
+and benchmarking cloud detection performance across different datasets.
 
-If you find this project helpful in your work, please cite our paper: https://www.mdpi.com/2072-4292/11/19/2312
+This repository supports cloud detection for Landsat 8 and Sentinel-2 imagery and allows quantitative and qualitative 
+comparisons against traditional methods like Fmask.
 
 ## Installation
 
-Install from source:
+To install CloudMask Optimizer from source, follow these steps:
 ```
 git clone https://github.com/aliFrancis/cloudFCN
 cd cloudFCN
@@ -15,36 +19,70 @@ python setup.py install
 
 ## Dataset
 
-First, we download the dataset from https://landsat.usgs.gov/landsat-8-cloud-cover-assessment-validation-data
-. Then we use a 'cleaning' script to convert it into an appropriate format, normalising the channels and splitting scenes up into smaller tiles. E.g. for biome:
+This project utilizes multiple datasets for training, validation, and testing:
+
+Biome dataset: Used for training and validation. Available at https://landsat.usgs.gov/landsat-8-cloud-cover-assessment-validation-data. 
+
+Landsat Collection 2 dataset: Used for testing. Available at https://www.sciencebase.gov/catalog/item/61015b2fd34ef8d7055d6395. 
+
+Sentinel-2 dataset: Available at https://doi.org/10.5281/zenodo.4172871.
+
+Before using the datasets, the raw images must be preprocessed. A cleaning script is used to convert them into a compatible 
+format, normalize channels, and split scenes into smaller tiles. For example, to process the Biome dataset:
 
 ```
 python cloudFCN/data/clean_biome_data.py  path/to/download  path/for/output  [-s splitsize] [-d downsample] ...
 ```
+For Collection 2, use clean_data_set2.py, and for Sentinel-2, use sentinel_set.py.
 
-The exact settings we used for our experiments were:
+To replicate our experimental setup, use the following parameters:
 
 ```
-python cloudFCN/data/clean_biome_data.py  path/to/download  path/for/output  -s 398 -n True -t 0.8
+python cloudFCN/data/clean_biome_data.py  path/to/download  path/for/output  -s 384 -n True -t 0.8
 ```
 
-Using these settings will create tiles of 398-by-398 with all available bands. It will also add an extra 'band' to the data, which denotes whether a pixel has nodata values in it. This is useful so that later we can give zero weight to these pixels during training and in the statistics at validation.
+This command generates 384×384 tiles with all available bands. Additionally, an extra ‘nodata’ band can be added to mark 
+missing pixel values, ensuring they receive zero weight during training and validation.
 
-Currently, the data cleaning script does not sort data into training/validation sets. So, after cleaning the data, it's up to you to sort the data in the appropriate way (see the .csv files in the cloudFCN/experiments/biome folder to see how we organised it). It is recommended to use symlinks in order to not have to store multiple copies of the dataset (it can take up over 200GB).
+The dataset cleaning script does not automatically split the data into training and validation sets. To do this, use the 
+train_valid_test(_sentinel) function from data.Datasets, which has been integrated into the training pipeline.
 
-With a cleaned dataset, we then use a fit_model.py script, an example of which can be found in cloudFCN/demo/fit_model.py, which takes a fit_config.json as input. This handles the training and validation of a model for a given experiment.
-
+Once the dataset is ready, the training process is handled by fit_model.py, which requires a JSON configuration file 
+(fit_config.json). The script automates training and validation for a given experiment.
 
 ## Experiments
 
-Once the dataset is ready, to recreate the experiments conducted in the paper, use the scripts provided in the 'experiments' folder. This will not replicate results exactly, as there is random model initialisation, however results should be relatively close. Please consult the csv files contained in the 'experiments' folder for the scenes that were placed in which dataset split.
+After preparing the dataset, you can reproduce the experiments from our research paper using the scripts in the experiments 
+folder. These scripts train the MFCNN, CloudFCN, and CXN models. To train the SEnSeI model, use the corresponding script 
+in the SEnSeI folder.
 
-The 'Biome' experiment can be run with, e.g.:
+Although the results may vary slightly due to random model initialization, they should be close to the reported values.
+
+To run the Biome dataset experiment:
 
 ```
-python /path/to/experiments/biome/fit_model.py /path/to/experiments/biome/RGB/fit_config_1.json
+python /path/to/experiments/fit_model.py /path/to/experiments/biome/multispectral/fit_config_1.json
 ```
 
-Please ensure that the config file is set up with the right paths to your datasets, and also that if you use a model_checkpoint_dir, it already exists.
+Ensure that your configuration file has the correct dataset paths. If you're using a model_checkpoint_dir, make sure the 
+directory exists.
 
-After each epoch, a table is printed containing the percentage accuracy, commission and omission on each of the validation folders given (e.g. Barren, Forest etc.). This takes a fairly long time, so if you'd like to skip this you can change the frequency of the callback in fit_model.py, or increase the number of steps_per_epoch in the config, to do it less often.
+After each training epoch, the script prints a table showing accuracy, commission, and omission errors for each validation 
+set (e.g., Barren, Forest, etc.). This process can be time-consuming. To speed up training, modify the callback frequency 
+in fit_model.py or increase steps_per_epoch in the configuration file.
+
+## Results
+
+To evaluate and analyze results, use the functions in the Fmask folder (compare_fmask_mask). This module compares 
+Fmask-generated cloud masks with predictions from the trained model. Before running the comparison, ensure that the 
+Fmask dataset is correctly prepared, and that images are split into patches.
+
+The most important functions are located in compare_fmask_mask.py.
+
+## Models and Metrics
+
+Pretrained models are stored in the models folder. Additional metrics and evaluation tools can be found in the metric folder.
+
+For further details, refer to the original paper or contact antonchajjka@gmail.com.
+
+

@@ -19,11 +19,26 @@ from cxn import cxn_model
 from output.defs_for_output import img_mask_pair
 
 
+
 def fit_model_sentinel(config):
     """
-    Return trained keras model. Main training function for cloud detection. Parameters
-    contained in config file.
+    Trains a cloud detection model for Sentinel-2 images using a given configuration.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary containing:
+        - `io_options`: Paths for input/output data.
+        - `fit_options`: Training parameters (batch size, epochs, etc.).
+        - `model_options`: Model-specific parameters (number of bands, classes, etc.).
+
+    Returns
+    -------
+    model : keras.Model
+        Trained Keras model.
     """
+
+    # Load configuration parameters
     io_opts = config['io_options']
     model_save_path = io_opts['model_save_path']
     model_name = io_opts['model_name']
@@ -40,15 +55,17 @@ def fit_model_sentinel(config):
     sentinel_mask_dir = io_opts['sentinel_mask_path']
     test_sentinel_path = io_opts['test_sentinel_path']
 
+    # Construct model save path
     model_save_path = os.path.join(model_save_path,
                                    f'model_sentinel_{model_name}_{patch_size}_{epochs}_{steps_per_epoch}.keras')
 
-
+    # Determine number of input channels
     if bands is not None:
         num_channels = len(bands)
     else:
         num_channels = 13
 
+    # Load Sentinel dataset paths
     sentinel_set = img_mask_pair(sentinel_img_dir, sentinel_mask_dir)
 
     with open(test_sentinel_path, "rb") as f:
@@ -63,11 +80,11 @@ def fit_model_sentinel(config):
     #     adjusted_mask_path = os.path.join(project_path, mask_clean_path)
     #     test_sentinel_full_paths.append((adjusted_image_path, adjusted_mask_path))
 
+    # Ensure no repetition of test dataset in training set
     pickle_paths_set = set(sentinel_set)
-
-    # Filter out tuples that are in the pickle file
     sentinel_set_no_repitition = [path for path in pickle_paths_set if path not in test_sentinel]
 
+    # Split dataset into train, validation, and test sets
     train_set_sentinel, valid_set_sentinel, test = train_valid_test_sentinel(sentinel_set_no_repitition,
                                                                              train_ratio=0.8227, val_ratio=0.1773,
                                                                              test_ratio=0.0)
@@ -76,6 +93,7 @@ def fit_model_sentinel(config):
     print('Number of training images:', len(train_set_sentinel))
     print('Number of validation images:', len(valid_set_sentinel))
 
+    # Create train data loader
     train_loader = loader.dataloader(
         train_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=False),
@@ -87,7 +105,7 @@ def fit_model_sentinel(config):
         num_channels=num_channels,
         left_mask_channels=num_classes)
 
-
+    # Create validation data loader
     valid_loader = loader.dataloader(
         valid_set_sentinel, batch_size, patch_size,
         transformations=[trf.train_base(patch_size, fixed=True),
@@ -98,8 +116,11 @@ def fit_model_sentinel(config):
         num_classes=num_classes,
         num_channels=num_channels,
         left_mask_channels=num_classes)
+
+    # Compute validation steps
     summary_steps = len(valid_set_sentinel) // batch_size
 
+    # Initialize the model
     if model_name == "mfcnn":
         model = model_mfcnn_def.build_model_mfcnn(
             num_channels=num_channels, num_classes=num_classes, dropout_p=0.5)
@@ -119,9 +140,11 @@ def fit_model_sentinel(config):
     else:
         raise ValueError('Choose correct model`s name')
 
+    # Create data generators
     train_gen = train_loader()
     valid_gen = valid_loader()
 
+    # Define callback paths
     csv_logger_save_root = os.path.join(
         os.path.dirname(model_save_path), f'training_log_sentinel_{model_name}_{epochs}_{steps_per_epoch}.csv'
     )
@@ -132,7 +155,7 @@ def fit_model_sentinel(config):
     # Ensure directory exists
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
-    # Callbacks
+    # Define training callbacks
     csv_logger = CSVLogger(csv_logger_save_root, append=True)
     model_checkpoint = ModelCheckpoint(
         model_checkpoint_save_root,
@@ -145,6 +168,7 @@ def fit_model_sentinel(config):
     # Combine callbacks
     callbacks = [model_checkpoint, csv_logger]
 
+    # Train the model
     history = model.fit(
         train_gen,
         validation_data=valid_gen,
@@ -154,6 +178,7 @@ def fit_model_sentinel(config):
         verbose=1,
         callbacks=callbacks)
 
+    # Save training history and test dataset paths
     try:
         history_path = os.path.join(
             os.path.dirname(model_save_path),

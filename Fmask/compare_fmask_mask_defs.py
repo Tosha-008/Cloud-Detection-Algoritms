@@ -10,6 +10,7 @@ import json
 import csv
 import cv2
 from MFCNN.model_mfcnn_def import MCDropoutModel
+from scipy.ndimage import zoom
 
 
 custom_objects = {
@@ -25,7 +26,10 @@ custom_objects = {
 
 def calculate_ndvi(sentinel_image):
     """
-    Calculates NDVI as a proxy for surface temperature using Sentinel-2 data.
+    Calculates the Normalized Difference Vegetation Index (NDVI)
+    using Sentinel-2 bands.
+
+    NDVI = (NIR - RED) / (NIR + RED)
 
     Parameters:
         sentinel_image (np.array): Sentinel-2 image with 13 channels.
@@ -41,7 +45,7 @@ def calculate_ndvi(sentinel_image):
 
 def thermal_proxy(sentinel_image):
     """
-    Creates a proxy for thermal data using SWIR and NDVI.
+    Creates a thermal proxy using SWIR bands and NDVI.
 
     Parameters:
         sentinel_image (np.array): Sentinel-2 image with 13 channels.
@@ -54,9 +58,6 @@ def thermal_proxy(sentinel_image):
     ndvi = calculate_ndvi(sentinel_image)
     thermal_proxy = (swir1 + swir2) / 2 * (1 - ndvi)
     return thermal_proxy
-
-
-from scipy.ndimage import zoom
 
 
 def resample_to_landsat_resolution(channel, sentinel_res=60, landsat_res=30):
@@ -76,16 +77,25 @@ def resample_to_landsat_resolution(channel, sentinel_res=60, landsat_res=30):
 
 
 def landsat_12_to_13(img, variant=1):
+    """
+    Converts a 12-channel Landsat image to a 13-channel Sentinel-like format.
+
+    Parameters:
+        img (np.array): Input Landsat image with 12 channels.
+        variant (int): Conversion variant.
+
+    Returns:
+        np.array: Converted image with 13 channels.
+    """
     if img.shape[-1] != 12:
         print(f"Skipping: expected 11 channels, found {img.shape[-1]}")
         return None
 
-    red_edge_sim = (img[:, :, 3] + img[:, :, 4]) / 2  # Аппроксимация Red Edge (B5, B6, B7)
+    red_edge_sim = (img[:, :, 3] + img[:, :, 4]) / 2  # Approximate Red Edge using Bands 5 & 6
     vapor_sim = (img[:, :, 4] - img[:, :, 6]) / (img[:, :, 4] + img[:, :, 6] + 1e-6)
     vapor_sim_norm = (vapor_sim - np.min(vapor_sim)) / (np.max(vapor_sim) - np.min(vapor_sim) + 1e-6)
-    cirrus_sim = img[:, :, 8]  # Используем Thermal Band (B9) как Cirrus
-    thermal_sim = (img[:, :, 9] + img[:, :, 10]) / 2  # Среднее Thermal для B10
-    additional_red_edge = red_edge_sim  # Ещё один Red Edge для B8A
+    cirrus_sim = img[:, :, 8]  # Use Thermal Band as Cirrus
+    thermal_sim = (img[:, :, 9] + img[:, :, 10]) / 2  # Average Thermal Bands
 
     selected_channels_1 = [
         img[:, :, 3],  # Band 4 (Red) -> Sentinel B4
@@ -129,9 +139,17 @@ def landsat_12_to_13(img, variant=1):
     return final_image
 
 
-
-
 def sentinel_13_to_11(img, variant=1):
+    """
+    Converts a 13-channel Sentinel-2 image to an 11-channel Landsat-like format.
+
+    Parameters:
+        img (np.array): Input Sentinel-2 image with 13 channels.
+        variant (int): Conversion variant.
+
+    Returns:
+        np.array: Converted image with 11 channels.
+    """
     if img.shape[-1] != 13:
         print(f"Skipping: expected 13 channels, found {img.shape[-1]}")
         pass
@@ -146,9 +164,7 @@ def sentinel_13_to_11(img, variant=1):
     panchromatic_approx = (0.3 * img[:, :, 1] + 0.3 * img[:, :, 2] + 0.3 * img[:, :, 3] + 0.1 * img[:, :, 7])
 
     # sentinel_b1_resampled = resample_to_landsat_resolution(img[:, :, 0])
-
     # cirrus_resampled = resample_to_landsat_resolution(img[:, :, 10], sentinel_res=60, landsat_res=30)  # Scale from 60m to 30m
-
 
     selected_channels_1 = [
         img[:, :, 3],  # Band 4 (Red)
@@ -474,7 +490,7 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
                                                          alpha=alpha)
         if predict_uncertainty:
             pred_mask = np.argmax(pred_mask.squeeze(), axis=-1)
-            pred_mask = 1 - pred_mask
+            pred_mask = pred_mask
 
         # Accumulate predicted metrics
         all_metrics_pred["accuracy"].append(metrics["predicted"]["accuracy"])
@@ -493,15 +509,16 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
 
         if display:
             # Display the images
-            fig, axes = plt.subplots(2, 2, figsize=(18, 12))  # Create 2x2 grid
+            fig, axes = plt.subplots(2, 2, figsize=(12, 12))  # Create 2x2 grid
 
             image_rgb = image.squeeze()[:, :, :3]
             axes[0, 0].imshow(image_rgb)
-            axes[0, 0].set_title(f"Image from {os.path.dirname(image_path)}")
+            # axes[0, 0].set_title(f"Image from {os.path.dirname(image_path)}")
+            axes[0, 0].set_title(f"RGB Image")
             axes[0, 0].axis('off')
 
             axes[0, 1].imshow(mask[:, :, -1], cmap='gray', vmin=0, vmax=1)
-            axes[0, 1].set_title("Mask")
+            axes[0, 1].set_title("Ground Truth")
             axes[0, 1].axis('off')
 
             if predict_uncertainty:
@@ -518,8 +535,21 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
                     if display_chanel:
                         axes[1, 0].imshow(pred_mask.squeeze()[:, :, -display_chanel], cmap='gray', vmin=0, vmax=1)
                     else:
+                        color_mask_fmask = np.zeros((*mask.shape[:2], 3))
+
+                        if binary_fmask is not None:
+
+                            true_positive_fmask = (mask[:, :, -1] == 1) & (binary_fmask == 1)  # TP
+                            false_positive_fmask = (mask[:, :, -1] == 0) & (binary_fmask == 1)  # FP
+                            false_negative_fmask = (mask[:, :, -1] == 1) & (binary_fmask == 0)  # FN
+
+                            color_mask_fmask[true_positive_fmask] = [0, 1, 0]
+                            color_mask_fmask[false_positive_fmask] = [1, 0, 0]  # (FP)
+                            color_mask_fmask[false_negative_fmask] = [1, 0, 0]  # (FN)
+                            binary_fmask = color_mask_fmask
+
                         axes[1, 0].imshow(binary_fmask, cmap='gray', vmin=0, vmax=1)
-                    axes[1, 0].set_title("Fmask")
+                    axes[1, 0].set_title("Fmask prediction")
                     axes[1, 0].axis('off')
 
                     # Add metrics below the corresponding images
@@ -531,6 +561,19 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
                     )
                     axes[1, 0].text(0.5, -0.2, metrics_text_fmask, color='black', ha='center', va='top',
                                     transform=axes[1, 0].transAxes, fontsize=10)
+
+                # can be changed or deleted
+                color_mask = np.zeros((*mask.shape[:2], 3))
+
+                true_positive = (mask[:, :, -1] == 1) & (pred_mask_binary == 1)
+                false_positive = (mask[:, :, -1] == 0) & (pred_mask_binary == 1)
+                false_negative = (mask[:, :, -1] == 1) & (pred_mask_binary == 0)
+
+                color_mask[true_positive] = [0, 1, 0]
+                color_mask[false_positive] = [1, 0, 0]  # (FP)
+                color_mask[false_negative] = [1, 0, 0]  # (FN)
+
+                pred_mask_binary = color_mask
 
                 axes[1, 1].imshow(pred_mask_binary, cmap='gray', vmin=0, vmax=1)
                 axes[1, 1].set_title(f'Predicted Mask')
@@ -547,6 +590,7 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
                                 transform=axes[1, 1].transAxes, fontsize=10)
 
             plt.tight_layout()
+            fig.subplots_adjust(bottom=0.2)
             plt.show()
 
     # Return aggregated metrics
@@ -554,8 +598,6 @@ def aggregate_image_metrics(group_folders, dataset_name, model, model_name, disp
         "predicted": {k: sum(v) / len(v) for k, v in all_metrics_pred.items() if v},
         "fmask": {k: sum(v) / len(v) for k, v in all_metrics_fmask.items() if v} if all_metrics_fmask["accuracy"] else None
     }
-
-
 
 
 def split_images_by_cloudiness(folder, output_file, dataset_name='Set_2', mask_storage=None):
@@ -762,8 +804,6 @@ def normalize_image(image, min_value=0, max_value=1, mode=1):
     return normalized_image
 
 
-
-
 def reorder_channels(image, dataset_name, model_name):
     if model_name in ['mfcnn', 'cxn', 'sensei_mfcnn'] and dataset_name in ['Set_2', 'Biome']:
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11]]
@@ -773,6 +813,7 @@ def reorder_channels(image, dataset_name, model_name):
         return landsat_12_to_13(image, variant=1)
     elif model_name in ['mfcnn_sentinel', 'cxn_sentinel', 'mfcnn_finetuned', 'mfcnn_finetuned_lowclouds', 'mfcnn_common', 'sensei_mfcnn'] and dataset_name == 'Sentinel_2':
         return image[..., [3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
+    return None
 
 
 def display_images_for_group(model, model_name, dataset_name, group_name, fmask_folder=None, norm_folder=None,

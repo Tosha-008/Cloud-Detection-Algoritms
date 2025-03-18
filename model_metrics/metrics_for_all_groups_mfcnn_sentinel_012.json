@@ -1,0 +1,47 @@
+{
+    "low": {
+        "predicted": {
+            "accuracy": 0.49213202582465265,
+            "precision": 0.2674075426488044,
+            "recall": 0.724021556847164,
+            "f1": 0.25571976571597493
+        },
+        "fmask": null
+    },
+    "middle": {
+        "predicted": {
+            "accuracy": 0.6271190049913197,
+            "precision": 0.6825453465703711,
+            "recall": 0.6381354988324694,
+            "f1": 0.5949529076737607
+        },
+        "fmask": null
+    },
+    "high": {
+        "predicted": {
+            "accuracy": 0.8002385796440972,
+            "precision": 0.9359525739164866,
+            "recall": 0.8284611753190704,
+            "f1": 0.8530454846357862
+        },
+        "fmask": null
+    },
+    "only clouds": {
+        "predicted": {
+            "accuracy": 0.8060383436414931,
+            "precision": 1.0,
+            "recall": 0.8060383436414931,
+            "f1": 0.8714574015681675
+        },
+        "fmask": null
+    },
+    "no clouds": {
+        "predicted": {
+            "accuracy": 0.3931772867838542,
+            "precision": 0.01,
+            "recall": 1.0,
+            "f1": 0.01
+        },
+        "fmask": null
+    }
+}

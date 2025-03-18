@@ -3,7 +3,20 @@ import numpy as np
 from osgeo import gdal
 
 
-def split_and_save_for_Fmask(input_dir, output_dir, splitsize=398, nodata_amount=0.0):
+def split_and_save_for_Fmask(input_dir, output_dir, splitsize=398):
+    """
+    Splits large raster images into smaller tiles for Fmask processing and saves them as .npy files.
+
+    Parameters:
+        input_dir (str): Directory containing the input raster images (.img format).
+        output_dir (str): Directory where the split tiles will be saved.
+        splitsize (int, optional): Size of the square tiles (default is 398x398 pixels).
+
+    Returns:
+        None
+    """
+
+    # Iterate through all files in the input directory
     for file in os.listdir(input_dir):
         if not file.endswith('.img'):
             continue
@@ -12,7 +25,7 @@ def split_and_save_for_Fmask(input_dir, output_dir, splitsize=398, nodata_amount
         fmask_dataset = gdal.Open(file_path)
 
         if not fmask_dataset:
-            raise ValueError(f"Не удалось открыть файл {file_path}")
+            raise ValueError(f"Failed to open file {file_path}")
 
         im = fmask_dataset.GetRasterBand(1).ReadAsArray()
 

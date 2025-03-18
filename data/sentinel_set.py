@@ -1,8 +1,25 @@
 import os
 import numpy as np
 
-
 def split_and_save_patches(input_folder, patch_size, output_folder=None):
+    """
+    Splits .npy images from the input folder into smaller patches of a given size and saves them.
+
+    Parameters
+    ----------
+    input_folder : str
+        Path to the folder containing .npy images.
+    patch_size : int
+        The size of the square patches to be extracted.
+    output_folder : str, optional
+        Path to the folder where patches will be saved.
+        If not specified, a "patches" subfolder will be created inside input_folder.
+
+    Returns
+    -------
+    None
+        The function processes images and saves patches in the output folder.
+    """
     if output_folder is None:
         output_folder = os.path.join(input_folder, "patches")
     os.makedirs(output_folder, exist_ok=True)

@@ -13,18 +13,29 @@ sys.path.append(project_path)
 from data import Constants
 
 """
-Script for cleaning biome dataset, downloaded from www.usgs.gov
+This script processes a biome dataset obtained from USGS by:
 
-Takes 11-band tiffs plus an extra band for no-data values, and converts into 3D numpy array.
-Takes mask envi file and converts to numpy arrays.
-Arrays are saved as 'image.npy' and 'mask.npy' in one folder per image
+    Reading 11-band Landsat 8 TIFF images and a corresponding mask file.
+    Normalizing the image data.
+    Splitting the data into smaller patches.
+    Saving each patch as NumPy arrays (image.npy, mask.npy).
 """
 
 
 def is_valid_dir(dir):
     """
-    Return bool. If dir contains all band files and a .img envi mask file, and no subdirectories
+    Checks if the directory contains:
+    - 11-band Landsat 8 TIFF images.
+    - A .img ENVI mask file.
+    - No subdirectories.
+
+    Args:
+        dir (str): Path to the dataset directory.
+
+    Returns:
+        bool: True if the directory is valid, otherwise False.
     """
+
     children = os.listdir(dir)
     if any(os.path.isdir(child) for child in children):
         return False
@@ -39,7 +50,24 @@ def is_valid_dir(dir):
 
 
 def clean_tile(tile_dir, bands=None, nodata_layer=False, downsample=None):
-    # Load constants for band-wise normalisation
+    """
+    Processes a single dataset tile:
+    - Reads specified Landsat 8 bands.
+    - Normalizes the image using predefined constants.
+    - Resizes Band 8 to match other bands if needed.
+    - Reads and processes the mask file.
+    - Optionally downsamples the image and mask.
+
+    Args:
+        tile_dir (str): Path to the dataset tile.
+        bands (list, optional): List of bands to process. Defaults to all 11 bands.
+        nodata_layer (bool, optional): Whether to add a no-data layer. Defaults to False.
+        downsample (float, optional): Downsampling factor. Defaults to None.
+
+    Returns:
+        tuple: (Processed image array, mask array)
+    """
+
     consts = Constants.Landsat_8_constants()
     if bands == None:
         bands = [i for i in range(1, 12)]  # take all bands
@@ -93,6 +121,19 @@ def clean_tile(tile_dir, bands=None, nodata_layer=False, downsample=None):
 
 
 def split_and_save(im, mask, dir, splitsize=398, nodata_amount=0.0):
+    """
+    Splits the image into smaller patches and saves them as NumPy arrays.
+
+    Args:
+        im (numpy.ndarray): Image array.
+        mask (numpy.ndarray): Corresponding mask array.
+        dir (str): Output directory.
+        splitsize (int, optional): Patch size. Defaults to 398.
+        nodata_amount (float, optional): Maximum fraction of no-data pixels allowed. Defaults to 0.0.
+
+    Saves:
+        - 'image.npy' and 'mask.npy' inside a folder for each patch.
+    """
     print(f'3 ----- {im.shape}')  # 3
 
     n_x = im.shape[0] // splitsize

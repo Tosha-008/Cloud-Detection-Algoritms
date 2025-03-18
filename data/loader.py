@@ -7,36 +7,46 @@ import time
 import pickle
 import yaml
 
+"""
+This script handles data loading, preprocessing, and augmentation for multispectral image datasets. It includes:
+
+    Batch loading of images and masks.
+    Data augmentation through transformations.
+    Support for Sentinel and Landsat datasets.
+    Weighted data sampling from different datasets.
+    Processing spectral descriptors from YAML metadata files.
+"""
+
 
 def dataloader(dataset, batch_size, patch_size, transformations=None,
                shuffle=False, num_classes=5, num_channels=12, left_mask_channels=3):
     """
-    Function to create pipeline for dataloading, creating batches of image/mask pairs.
+    Creates a data pipeline for loading batches of image/mask pairs.
 
     Parameters
     ----------
-    left_mask_chanels
     dataset : Dataset
-        Contains paths for all image/mask pairs to be sampled.
+        The dataset containing paths for image/mask pairs.
     batch_size : int
-        Number of image/mask pairs per batch.
+        The number of image/mask pairs per batch.
     patch_size : int
-        Spatial dimension of each image/mask pair (assumes width==height).
+        The spatial dimensions of each image/mask pair (assumes square images).
     transformations : list, optional
-        Set of transformations to be applied in series to image/mask pairs
+        A list of transformation functions to apply to image/mask pairs.
     shuffle : bool, optional
-        True for randomized indexing of dataset, False for ordered.
+        If True, randomizes the order of the dataset.
     num_classes : int, optional
-        Number of classes in masks.
+        The number of classes in the mask.
     num_channels : int, optional
-        Number of channels in images.
+        The number of channels in the image.
+    left_mask_channels : int, optional
+        The number of mask channels to keep.
 
     Returns
     -------
     generator : iterator
         Yields batches of image/mask pairs.
     """
-
     if batch_size > len(dataset) and not shuffle:
         raise ValueError('Dataset is too small for given batch size.')
 
@@ -85,14 +95,24 @@ def dataloader_descriptors(dataset, batch_size, transformations=None,
                            shuffle=False, descriptor_list=None, left_mask_channels=3,
                            band_policy=None):
     """
-    Function to create a pipeline for dataloading, creating batches of image/mask pairs,
-    with the ability to process descriptors.
+    Creates a data pipeline for loading batches of image/mask pairs with descriptors.
 
     Parameters
     ----------
-    ...
-    band_policy : str / list / int / tuple, optional
-        Policy for selecting bands. If tuple, a fixed policy will be generated for each batch.
+    dataset : Dataset
+        The dataset containing paths for image/mask pairs.
+    batch_size : int
+        The number of image/mask pairs per batch.
+    transformations : list, optional
+        A list of transformation functions to apply to image/mask pairs.
+    shuffle : bool, optional
+        If True, randomizes the order of the dataset.
+    descriptor_list : list, optional
+        List of descriptors associated with each band in the dataset.
+    left_mask_channels : int, optional
+        The number of mask channels to keep.
+    band_policy : str, list, int, tuple, optional
+        Defines the policy for selecting bands. If a tuple, generates a random band selection per batch.
 
     Returns
     -------
@@ -167,6 +187,28 @@ def dataloader_descriptors(dataset, batch_size, transformations=None,
 
 
 def combined_generator(sentinel_gen, landsat_gen, sentinel_weight=0.3, landsat_weight=0.7, seed=None):
+    """
+    Merges two dataset generators (Sentinel and Landsat) with weighted sampling.
+
+    Parameters
+    ----------
+    sentinel_gen : generator
+        The data generator for Sentinel images.
+    landsat_gen : generator
+        The data generator for Landsat images.
+    sentinel_weight : float, optional
+        The probability of selecting a Sentinel sample.
+    landsat_weight : float, optional
+        The probability of selecting a Landsat sample.
+    seed : int, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    generator : iterator
+        Yields batches from either Sentinel or Landsat dataset.
+    """
+
     if seed is None:
         seed = random.randint(0, 2**32 -1)
 
@@ -182,10 +224,40 @@ def combined_generator(sentinel_gen, landsat_gen, sentinel_weight=0.3, landsat_w
 
 
 def convert_paths_to_tuples(paths_list):
+    """
+    Converts a list of directory paths to a list of image/mask file tuples.
+
+    Parameters
+    ----------
+    paths_list : list
+        A list of directory paths.
+
+    Returns
+    -------
+    list of tuples
+        Each tuple contains paths to the image and mask files.
+    """
+
     return [(os.path.join(path, 'image.npy'), os.path.join(path, 'mask.npy')) for path in paths_list]
 
 
 def load_paths(filename="dataloader.pkl", valid=False):
+    """
+    Loads dataset paths from a pickle file.
+
+    Parameters
+    ----------
+    filename : str, optional
+        The name of the pickle file containing dataset paths.
+    valid : bool, optional
+        If True, returns both shuffled and original paths.
+
+    Returns
+    -------
+    list or tuple
+        If valid=True, returns (shuffled paths, original paths).
+        Otherwise, returns only the shuffled paths.
+    """
     if filename is None:
         print("No existing datapaths found. Creating a new one.")
         if valid:
@@ -207,22 +279,20 @@ def load_paths(filename="dataloader.pkl", valid=False):
         return None
 
 
-import yaml
-
 def generate_descriptor_list_from_yaml(yaml_path):
     """
-    Creates a descriptor list based on a YAML metadata file.
+    Generates a descriptor list based on a YAML metadata file.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     yaml_path : str
         Path to the YAML metadata file.
 
-    Returns:
-    --------
+    Returns
+    -------
     descriptor_list : list
-        List where each entry is a descriptor for a channel (a list of three values:
-        [left wavelength, center wavelength, right wavelength]).
+        A list where each entry is a descriptor for a spectral band
+        in the format [left wavelength, center wavelength, right wavelength].
     """
     try:
         # Load the YAML file

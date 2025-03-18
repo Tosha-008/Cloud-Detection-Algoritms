@@ -7,12 +7,22 @@ from keras.layers import Input, Conv2D, concatenate, BatchNormalization, \
     Layer, SeparableConv2D, DepthwiseConv2D, Concatenate
 from keras.models import Model
 from tensorflow.keras.optimizers import Adadelta, Adam
-import math
 
-smooth = 0.0000001
+# A small smoothing factor to avoid division by zero in loss calculations
+smooth = 1e-7
 
 
 def aspp(x, out_shape):
+    """
+    Atrous Spatial Pyramid Pooling (ASPP) module for multi-scale feature extraction.
+
+    Args:
+        x: Input tensor.
+        out_shape: The spatial dimensions of the output feature map.
+
+    Returns:
+        Concatenated feature maps from different dilation rates.
+    """
     b0 = SeparableConv2D(256, (1, 1), padding="same", use_bias=False)(x)
     b0 = BatchNormalization()(b0)
     b0 = Activation("relu")(b0)
@@ -55,6 +65,16 @@ def aspp(x, out_shape):
 
 
 def jacc_coef(y_true, y_pred):
+    """
+    Jaccard coefficient loss function for semantic segmentation.
+
+    Args:
+        y_true: Ground truth labels.
+        y_pred: Predicted labels.
+
+    Returns:
+        Jaccard loss value.
+    """
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
@@ -62,17 +82,17 @@ def jacc_coef(y_true, y_pred):
 
 
 def bn_relu(input_tensor):
-    """It adds a Batch_normalization layer before a Relu
+    """
+    Adds a Batch Normalization layer followed by a ReLU activation.
     """
     input_tensor = BatchNormalization(axis=3)(input_tensor)
     return Activation("relu")(input_tensor)
 
 
 def contr_arm(input_tensor, filters, kernel_size):
-    """It adds a feedforward signal to the output of two following conv layers in contracting path
-       TO DO: remove keras.layers.add and replace it with add only
     """
-
+    Contracting path block with two Separable Convolutions and a shortcut connection.
+    """
     x = SeparableConv2D(filters, kernel_size, padding='same')(input_tensor)
     x = bn_relu(x)
 
@@ -277,6 +297,18 @@ def improve_ff_block1(input_tensor1, pure_ff):
 
 
 def model_arch(input_rows=256, input_cols=256, num_of_channels=3, num_of_classes=1):
+    """
+    Defines the architecture of the segmentation model.
+
+    Args:
+        input_rows: Height of input images.
+        input_cols: Width of input images.
+        num_of_channels: Number of input channels.
+        num_of_classes: Number of output classes.
+
+    Returns:
+        A compiled Keras model.
+    """
     inputs = Input((input_rows, input_cols, num_of_channels))
     conv1 = Conv2D(16, (3, 3), activation='relu', padding='same')(inputs)
 
