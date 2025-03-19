@@ -1,9 +1,13 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
-   name='cloudFCN',
-   description='Module for developing and experimenting with FCNs for cloud masking',
-   author='Alistair Francis',
-   author_email='a.francis.16@ucl.ac.uk',
-   packages=['cloudFCN','cloudFCN/data','cloudFCN/experiments'],  #same as name
+    name='Cloud-Detection-Algorithms',
+    version='0.1.0',
+    description='Algorithms for developing and experimenting with CNNs for cloud masking',
+    author='Anton Chaika',
+    author_email='antonchajjka@gmail.com',
+    url='https://github.com/Tosha-008/Cloud-Detection-Algoritms.git',
+    packages=find_packages(),
+    python_requires='>=3.7',
+    include_package_data=True
 )

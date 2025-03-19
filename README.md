@@ -10,10 +10,10 @@ comparisons against traditional methods like Fmask.
 
 ## Installation
 
-To install CloudMask Optimizer from source, follow these steps:
+To install Cloud-Detection-Algorithms from source, follow these steps:
 ```
-git clone https://github.com/aliFrancis/cloudFCN
-cd cloudFCN
+git clone https://github.com/Tosha-008/Cloud-Detection-Algorithms.git
+cd Cloud-Detection-Algorithms
 python setup.py install
 ```
 
